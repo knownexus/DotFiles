@@ -1,6 +1,6 @@
 # VCS-aware prompt — mirrors zsh 40-prompt
 # Left:  hostname$
-# Right (inline): path [branch:rev,status]
+# Right (same line, right-aligned): path [branch:rev,status]
 # Status flags use the same shorthand as the zsh version: ? A D R M
 
 function script:Get-VcsInfo {
@@ -48,19 +48,31 @@ function global:prompt {
 
     $hostName = $env:COMPUTERNAME
 
+    $location = "$(Get-Location)"
+
     $vcs = Get-VcsInfo
     if ($vcs) {
         $statusSuffix = if ($vcs.Flags) { ",$($vcs.Flags)" } else { '' }
         $branchPart   = "[$($vcs.Branch):$($vcs.Revno)$statusSuffix]"
-        $right = "${yellow}$(Get-Location)${reset} ${cyan}${branchPart}${reset}"
+        $rightColored = "${yellow}${location}${reset} ${cyan}${branchPart}${reset}"
+        $rightPlain   = "$location $branchPart"
     } else {
-        $right = "${yellow}$(Get-Location)${reset}"
+        $rightColored = "${yellow}${location}${reset}"
+        $rightPlain   = $location
     }
 
-    # Print path + VCS info on its own line, then hostname$ on the next
+    # Blank line above the prompt for breathing room
     Write-Host ""
-    Write-Host $right -NoNewline
-    Write-Host ""
+
+    # Right-align the path + VCS info on the same line as the prompt.
+    # Strategy: move cursor to (terminal width - visible length + 1), write the
+    # coloured right side, then return to column 1 so the prompt renders at the
+    # left edge.
+    $width = $Host.UI.RawUI.WindowSize.Width
+    $col   = $width - $rightPlain.Length + 1
+    if ($col -lt 1) { $col = 1 }
+
+    Write-Host "${esc}[${col}G${rightColored}${esc}[1G" -NoNewline
 
     return "${blue}${hostName}${reset}`$ "
 }
