@@ -10,6 +10,8 @@ function global:git!   { git status @args }
 # Add
 function global:ga     { git add @args }
 function global:gita   { git add @args }
+function global:gau     { git add -u @args }
+function global:gitau   { git add -u @args }
 
 # Whitespace-ignoring staged apply
 function global:gaw    { git diff -w | git apply --cached --ignore-whitespace }
