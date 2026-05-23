@@ -104,7 +104,7 @@ profile.d/
 | `gru` | `git remote update` |
 | `grpo` | `git remote prune origin` |
 | `giturl` | print remote origin URL |
-| `gitremote-reset` | hard reset to remote HEAD |
+| `remote!` | git reset --hard origin/{branch} | hard reset to remote HEAD |
 | `grd` | `git rebase develop` |
 | `grm` | `git rebase master` |
 | `gro` | `git rebase origin` |

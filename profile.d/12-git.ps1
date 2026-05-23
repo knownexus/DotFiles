@@ -112,6 +112,9 @@ function global:remote! {
     git reset --hard "origin/$branch"
 }
 
+function global:grh    { git reset --hard @args }
+
+
 # Rebase helpers
 function global:grd    { git rebase develop @args }
 function global:grm    { git rebase master @args }
@@ -124,13 +127,23 @@ function global:gitra2 { git rebase --abort }
 function global:groot  { git rebase -i --root master }
 
 function global:gri {
-    param([int]$N = 1)
-    git rebase -i "HEAD~$N"
+    param([string]$Target = '1')
+    if ($Target -match '^\d+$') {
+        git rebase -i "HEAD~$Target"
+    } else {
+        # SHA / branch / tag / HEAD~N — rebase from its parent so the named
+        # commit itself is the first entry in the todo list (editable).
+        git rebase -i "$Target^"
+    }
 }
 
 function global:grim {
-    param([int]$N = 1)
-    git rebase -i --rebase-merges "HEAD~$N"
+    param([string]$Target = '1')
+    if ($Target -match '^\d+$') {
+        git rebase -i --rebase-merges "HEAD~$Target"
+    } else {
+        git rebase -i --rebase-merges "$Target^"
+    }
 }
 
 # Rebase onto a branch found by partial name (mirrors rebase alias)

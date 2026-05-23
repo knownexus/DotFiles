@@ -10,34 +10,20 @@ function global:Invoke-Search {
     param(
         [Parameter(Mandatory, Position = 0)][string]$Pattern,
         [string]$Path = ".",
-        [string[]]$ExcludeDirs = $script:SearchExcludeDirs,
-        [int]$CharLimit = 500
+        [string[]]$ExcludeDirs = $script:SearchExcludeDirs
     )
-    Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue |
-        Where-Object {
-            $f = $_.FullName
-            -not ($ExcludeDirs | Where-Object { $f -like "*\$_\*" -or $f -like "*/$_/*" })
-        } |
-        Select-String -Pattern $Pattern -ErrorAction SilentlyContinue |
-        ForEach-Object {
-            $line = $_.Line.Trim()
-            if ($line.Length -gt $CharLimit) { $line = $line.Substring(0, $CharLimit) + '...' }
-            [PSCustomObject]@{
-                File  = $_.Path
-                Line  = $_.LineNumber
-                Match = $line
-            }
-        }
+    $excludeArgs = $ExcludeDirs | ForEach-Object { "--exclude-dir=$_" }
+    grep -rn --color=always $excludeArgs $Pattern $Path
 }
 
 # g  — search with full exclusion list
 function global:g  { Invoke-Search @args }
 
-# g1 — search with minimal exclusions (just .git)
-function global:g1 { Invoke-Search -ExcludeDirs @('.git') @args }
+# g1 — search with minimal exclusions
+function global:g1 { Invoke-Search -ExcludeDirs @('.git', '.claude', '.idea') @args }
 
-# g2 — search excluding .git and node_modules
-function global:g2 { Invoke-Search -ExcludeDirs @('.git', 'node_modules') @args }
+# g2 — search excluding .git, node_modules, .claude, .idea
+function global:g2 { Invoke-Search -ExcludeDirs @('.git', 'node_modules', '.claude', '.idea') @args }
 
 # Navigation
 function global:cdh { Set-Location $HOME }
@@ -60,6 +46,8 @@ Remove-Item -Path Alias:rp -Force -ErrorAction SilentlyContinue
 function global:go-repos { Set-Location 'C:\repos' }
 Set-Alias -Name rp -Value go-repos -Force -Option AllScope
 function global:rpa { Set-Location 'C:\repos\DriveFurtherAPI' }
+function global:rpn { Set-Location 'C:\repos\DriveFurtherNucleus' }
+function global:rpc { Set-Location 'C:\repos\CirrusAutomatedTests' }
 
 # Editor (respects $VISUAL / $EDITOR env vars)
 function global:v {
@@ -69,8 +57,11 @@ function global:v {
 
 function global:vb {
     $editor = if ($env:VISUAL) { $env:VISUAL } elseif ($env:EDITOR) { $env:EDITOR } else { 'vim' }
-    & $editor $PROFILE
+    & $editor 'C:\repos\pwsh\profile.d'
 }
+
+# Reload profile (mirrors source ~/.zshrc / sb on Linux)
+function global:sb { . $PROFILE }
 
 # Filesystem helpers
 function global:rmr { Remove-Item -Recurse -Force @args }
