@@ -59,9 +59,7 @@ function global:gitlg {
 }
 
 function global:gitlg2 {
-    git log --graph --abbrev-commit --decorate `
-        '--format=format:%C(bold blue)%h%C(reset) - %C(bold cyan)%aD%C(reset) %C(bold green)(%ar)%C(reset)%C(bold yellow)%d%C(reset)%n          %C(white)%s%C(reset) %C(dim white)- %an%C(reset)' `
-        --all @args
+    git log --oneline --graph --decorate --all @args
 }
 
 # Show
@@ -74,8 +72,19 @@ Remove-Item -Path Alias:gp -Force -ErrorAction SilentlyContinue
 function global:git-stash-pop { git stash pop }
 Set-Alias -Name gp -Value git-stash-pop -Force -Option AllScope
 function global:gst    { git stash push @args }
+function global:gstl   { git stash list @args }
 function global:stash  { git stash save @args }
 function global:stashp { git stash pop }
+
+# Fetch / pull
+function global:gitf   { git fetch @args }
+function global:gitpl  { git pull --rebase @args }
+
+# Cherry-pick
+function global:gitcp  { git cherry-pick @args }
+
+# Clean working tree (untracked files and dirs)
+function global:gclean { git clean -fd @args }
 
 # Push
 function global:gpf    { git push --force @args }

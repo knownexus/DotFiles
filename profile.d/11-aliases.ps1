@@ -25,8 +25,26 @@ function global:g1 { Invoke-Search -ExcludeDirs @('.git', '.claude', '.idea') @a
 # g2 — search excluding .git, node_modules, .claude, .idea
 function global:g2 { Invoke-Search -ExcludeDirs @('.git', 'node_modules', '.claude', '.idea') @args }
 
+# rg-based search (ripgrep) — faster, respects .gitignore automatically
+# rgs  — search with common noise dirs excluded
+# rgs1 — minimal exclusions (just .git, .claude, .idea)
+# rgs2 — exclude .git, node_modules, .claude, .idea
+function global:rgs {
+    $excludeArgs = $script:SearchExcludeDirs | ForEach-Object { "--glob=!$_/**" }
+    rg -n --color=always $excludeArgs @args
+}
+function global:rgs1 {
+    rg -n --color=always '--glob=!.git/**' '--glob=!.claude/**' '--glob=!.idea/**' @args
+}
+function global:rgs2 {
+    rg -n --color=always '--glob=!.git/**' '--glob=!node_modules/**' '--glob=!.claude/**' '--glob=!.idea/**' @args
+}
+
 # Navigation
-function global:cdh { Set-Location $HOME }
+function global:cdh  { Set-Location $HOME }
+function global:..   { Set-Location .. }
+function global:...  { Set-Location ..\.. }
+function global:.... { Set-Location ..\..\.. }
 
 $global:OLDPWD = $PWD
 
@@ -66,6 +84,28 @@ function global:sb { . $PROFILE }
 # Filesystem helpers
 function global:rmr { Remove-Item -Recurse -Force @args }
 function global:md  { New-Item -ItemType Directory -Force @args }
+
+function global:touch {
+    param([Parameter(Mandatory, ValueFromRemainingArguments)][string[]]$Paths)
+    $Paths | ForEach-Object {
+        if (Test-Path $_) { (Get-Item $_).LastWriteTime = Get-Date }
+        else { New-Item -ItemType File -Path $_ | Out-Null }
+    }
+}
+
+function global:open { Start-Process @args }
+
+# which — resolve a command to its source path
+function global:which { Get-Command @args | Select-Object -ExpandProperty Source }
+
+# path — show PATH entries one per line
+function global:path { $env:PATH -split ';' | Where-Object { $_ } }
+
+# psgrep — find a running process by partial name
+function global:psgrep {
+    param([Parameter(Mandatory)][string]$Name)
+    Get-Process | Where-Object { $_.Name -like "*$Name*" }
+}
 
 function global:remspace {
     param([Parameter(Mandatory)][string]$Path)

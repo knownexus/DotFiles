@@ -47,6 +47,69 @@ function global:New-GitProject {
 }
 Set-Alias -Name make-project -Value New-GitProject
 
+# Aliases cheat sheet — print defined aliases grouped by section
+function global:Show-ProfileAliases {
+    param([string]$File, [string]$Title)
+    $lines   = Get-Content $File
+    # First pass: collect Set-Alias -Value targets (implementation helpers, not short names)
+    $targets = @{}
+    foreach ($line in $lines) {
+        if ($line -match 'Set-Alias\s+.*-Value\s+(\S+)') { $targets[$matches[1]] = $true }
+    }
+    # Second pass: collect names grouped by section comment
+    $sections = [ordered]@{}
+    $current  = ''
+    $seen     = @{}
+    foreach ($line in $lines) {
+        if ($line -match '^# (.+)$') {
+            $current = $matches[1]
+        } elseif ($line -match '^function global:(\S+)') {
+            $name = $matches[1]
+            # skip internal helpers and alias-target long-names
+            if (-not $targets[$name] -and $name -notmatch '^(Invoke-|Show-)') {
+                if (-not $seen[$name]) {
+                    $seen[$name] = $true
+                    if (-not $sections[$current]) { $sections[$current] = [System.Collections.Generic.List[string]]::new() }
+                    $sections[$current].Add($name)
+                }
+            }
+        } elseif ($line -match "^\s*Set-Alias\s+.*-Name\s+(\S+)") {
+            $name = $matches[1]
+            if (-not $seen[$name]) {
+                $seen[$name] = $true
+                if (-not $sections[$current]) { $sections[$current] = [System.Collections.Generic.List[string]]::new() }
+                $sections[$current].Add($name)
+            }
+        }
+    }
+    Write-Host ""
+    Write-Host "  $Title" -ForegroundColor Cyan
+    Write-Host "  $('─' * ($Title.Length + 1))" -ForegroundColor DarkGray
+    foreach ($sec in $sections.Keys) {
+        $names = $sections[$sec]
+        if (-not $names -or $names.Count -eq 0) { continue }
+        Write-Host "   $sec" -ForegroundColor Yellow
+        $names | ForEach-Object { Write-Host ("     $_") -ForegroundColor White }
+    }
+}
+
+function global:aliases {
+    Show-ProfileAliases 'C:\repos\pwsh\profile.d\10-ls.ps1'       'ls aliases'
+    Show-ProfileAliases 'C:\repos\pwsh\profile.d\11-aliases.ps1'   'General aliases'
+    Show-ProfileAliases 'C:\repos\pwsh\profile.d\80-functions.ps1' 'Functions'
+    Write-Host ""
+}
+
+function global:gitaliases {
+    Show-ProfileAliases 'C:\repos\pwsh\profile.d\12-git.ps1' 'Git aliases'
+    Write-Host ""
+}
+
+function global:allaliases {
+    aliases
+    gitaliases
+}
+
 # Find-and-replace across all files under a path (mirrors fr)
 function global:fr {
     param(
