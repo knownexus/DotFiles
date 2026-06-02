@@ -1,6 +1,5 @@
 set background=dark
 set number
-set relativenumber
 set mouse=a
 set tabstop=4
 set expandtab

@@ -68,6 +68,7 @@ function global:rpn { Set-Location 'C:\repos\DriveFurtherNucleus' }
 function global:rpc { Set-Location 'C:\repos\CirrusAutomatedTests' }
 function global:rpn { Set-Location 'C:\repos\NexusWebsiteTemplate' }
 function global:rpp { Set-Location 'C:\repos\pwsh' }
+function global:rpm { Set-Location 'C:\repos\ManagementDashboard' }
 
 # Editor (respects $VISUAL / $EDITOR env vars)
 function global:v {
@@ -84,6 +85,18 @@ function global:vb {
 function global:sb { . $PROFILE }
 
 # Filesystem helpers
+# rm — remove one or more files/dirs; auto-recurses on directories (mirrors bash rm -rf)
+Remove-Item -Path Alias:rm -Force -ErrorAction SilentlyContinue
+function global:rm {
+    param([Parameter(Mandatory, ValueFromRemainingArguments)][string[]]$Paths)
+    foreach ($p in $Paths) {
+        if (Test-Path $p -PathType Container) {
+            Remove-Item -Recurse -Force $p
+        } else {
+            Remove-Item -Force $p
+        }
+    }
+}
 function global:rmr { Remove-Item -Recurse -Force @args }
 function global:md  { New-Item -ItemType Directory -Force @args }
 
