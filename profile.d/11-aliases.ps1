@@ -66,9 +66,9 @@ Set-Alias -Name rp -Value go-repos -Force -Option AllScope
 function global:rpa { Set-Location 'C:\repos\DriveFurtherAPI' }
 function global:rpn { Set-Location 'C:\repos\DriveFurtherNucleus' }
 function global:rpc { Set-Location 'C:\repos\CirrusAutomatedTests' }
-function global:rpn { Set-Location 'C:\repos\NexusWebsiteTemplate' }
 function global:rpp { Set-Location 'C:\repos\pwsh' }
 function global:rpm { Set-Location 'C:\repos\ManagementDashboard' }
+function global:rpnc { Set-Location 'C:\repos\NexusCommunity' }
 
 # Editor (respects $VISUAL / $EDITOR env vars)
 function global:v {
