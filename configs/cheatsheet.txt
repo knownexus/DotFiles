@@ -1,0 +1,91 @@
+╔══════════════════════════════════╗
+║         VIM  CHEATSHEET          ║
+╚══════════════════════════════════╝
+
+── MODES ───────────────────────────
+  i         insert before cursor
+  a         insert after cursor
+  o / O     new line below / above
+  v         visual (char)
+  V         visual (line)
+  ctrl+v    visual (block)
+  ESC       back to normal mode
+
+── MOTION ──────────────────────────
+  gg / G    top / bottom of file
+  H/M/L     top/middle/bottom screen
+  w / b     next / prev word
+  0 / $     start / end of line
+  %         jump to matching bracket
+  *         search word under cursor
+  '.        jump to last edit
+  ctrl+o    jump back in history
+  ctrl+i    jump forward in history
+
+── EDITING ─────────────────────────
+  ciw       change inner word
+  ci"       change inside quotes
+  di"       delete inside quotes
+  yiw       yank inner word
+  p / P     paste below / above
+  u         undo
+  ctrl+r    redo
+  .         repeat last change
+  ~         toggle case
+  >>  /  << indent / dedent line
+  gcc       comment line (if plugin)
+
+── SEARCH & REPLACE ────────────────
+  /foo      search forward
+  ?foo      search backward
+  n / N     next / prev result
+  :%s/a/b/g replace all in file
+  :s/a/b/g  replace all in line
+  :g/pat/d  delete lines matching
+
+── VISUAL MODE ─────────────────────
+  ctrl+v    column/block select
+  I         insert on all block lines
+  gv        reselect last selection
+  >  /  <   indent / dedent selection
+
+── SPLITS & WINDOWS ────────────────
+  ctrl+w s  horizontal split
+  ctrl+w v  vertical split
+  ctrl+w h/j/k/l  navigate splits
+  ctrl+w =  equalise split sizes
+  ctrl+w q  close split
+
+── BUFFERS ─────────────────────────
+  :b <tab>  cycle buffers
+  :bn / :bp next / prev buffer
+  :bd       close buffer
+
+── FILES ───────────────────────────
+  :e file   open file
+  :w        save
+  :q        quit
+  :wq       save and quit
+  :q!       quit without saving
+
+── COMMAND LINE ────────────────────
+  :sort     sort selected lines
+  :earlier 5m  rewind file 5 mins
+  ctrl+r "  paste last yank in cmdline
+
+── LEADER MAPPINGS (space) ─────────
+  <space>w  save file
+  <space>q  quit
+  <space>h  clear search highlight
+  <space>?  toggle cheatsheet
+
+── MARKS ───────────────────────────
+  ma        set mark a
+  `a        jump to mark a
+  ''        jump to last jump point
+
+── MACROS ──────────────────────────
+  qa        record macro into a
+  q         stop recording
+  @a        play macro a
+  @@        replay last macro
