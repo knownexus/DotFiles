@@ -26,3 +26,15 @@ $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     "$userPath;C:\Users\Phillip.Smyth\.local\bin",
     "User"
 )
+
+# Assign full access perms to user for c:\repos
+$acl = Get-Acl "C:\repos"
+$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    $env:USERNAME,
+    "FullControl",
+    "ContainerInherit,ObjectInherit",
+    "None",
+    "Allow"
+)
+$acl.SetAccessRule($rule)
+Set-Acl "C:\repos" $acl

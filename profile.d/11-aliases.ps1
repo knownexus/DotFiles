@@ -63,8 +63,10 @@ function global:cd {
 Remove-Item -Path Alias:rp -Force -ErrorAction SilentlyContinue
 function global:go-repos { Set-Location 'C:\repos' }
 Set-Alias -Name rp -Value go-repos -Force -Option AllScope
-function global:rpa { Set-Location 'C:\repos\DriveFurtherAPI' }
-function global:rpn { Set-Location 'C:\repos\DriveFurtherNucleus' }
+function global:rpa { Set-Location 'C:\repos\DriveFurtherAPI\develop' }
+function global:rpam { Set-Location 'C:\repos\DriveFurtherAPI\develop' }
+function global:rpn { Set-Location 'C:\repos\DriveFurtherNucleus\master' }
+function global:rpnm { Set-Location 'C:\repos\DriveFurtherNucleus\master' }
 function global:rpc { Set-Location 'C:\repos\CirrusAutomatedTests' }
 function global:rpp { Set-Location 'C:\repos\pwsh' }
 function global:rpm { Set-Location 'C:\repos\ManagementDashboard' }
