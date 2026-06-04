@@ -23,6 +23,85 @@ if (Get-Module -ListAvailable -Name posh-git -ErrorAction SilentlyContinue) {
     Import-Module posh-git
 }
 
+# Worktree name completion for wt-go, wt-done, wt-done-f
+# Completes the last path segment of each worktree (e.g. "feature\ABC-123-foo" → "ABC-123-foo")
+$script:WtCompleter = {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    git worktree list --porcelain 2>$null |
+        Where-Object { $_ -match '^worktree ' } |
+        ForEach-Object { $_ -replace '^worktree ', '' } |
+        Where-Object { $_ -notmatch '\.git$' } |  # skip bare repo entry
+        ForEach-Object { Split-Path $_ -Leaf } |
+        Where-Object { $_ -like "$wordToComplete*" } |
+        ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+}
+
+Register-ArgumentCompleter -CommandName wt-go     -ParameterName Name -ScriptBlock $script:WtCompleter
+Register-ArgumentCompleter -CommandName wt-done   -ParameterName Name -ScriptBlock $script:WtCompleter
+Register-ArgumentCompleter -CommandName wt-done-f -ParameterName Name -ScriptBlock $script:WtCompleter
+
+# ---------------------------------------------------------------------------
+# Branch-name completers for git alias functions
+# ---------------------------------------------------------------------------
+
+# Local branches only — for operations that only make sense on local branches.
+$script:LocalBranchCompleter = {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    git branch 2>$null |
+        ForEach-Object { $_.Trim() -replace '^\* ', '' } |
+        Where-Object { $_ -like "$wordToComplete*" } |
+        ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+}
+
+# All branches — local plus remote (origin/ prefix stripped, deduped) for checkout.
+$script:AllBranchCompleter = {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    $local = git branch 2>$null |
+        ForEach-Object { $_.Trim() -replace '^\* ', '' }
+    $remote = git branch -r 2>$null |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -notmatch ' -> ' } |
+        ForEach-Object { $_ -replace '^[^/]+/', '' }
+    ($local + $remote) |
+        Sort-Object -Unique |
+        Where-Object { $_ -like "$wordToComplete*" } |
+        ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+}
+
+# Remote branch names only — for pushdr (the target name on origin).
+$script:RemoteBranchCompleter = {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    git branch -r 2>$null |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -notmatch ' -> ' } |
+        ForEach-Object { $_ -replace '^[^/]+/', '' } |
+        Where-Object { $_ -like "$wordToComplete*" } |
+        ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+}
+
+# gitc / gitb use @args (no named param) — completer fires for any argument position.
+Register-ArgumentCompleter -CommandName gitc -ScriptBlock $script:AllBranchCompleter
+Register-ArgumentCompleter -CommandName gitb -ScriptBlock $script:LocalBranchCompleter
+
+# gri / grim have a named -Target param.
+Register-ArgumentCompleter -CommandName gri  -ParameterName Target -ScriptBlock $script:LocalBranchCompleter
+Register-ArgumentCompleter -CommandName grim -ParameterName Target -ScriptBlock $script:LocalBranchCompleter
+
+# pushdr has a named -RemoteBranch param.
+Register-ArgumentCompleter -CommandName pushdr -ParameterName RemoteBranch -ScriptBlock $script:RemoteBranchCompleter
+
+# wt-feature / wt-fix have a named -Base param.
+Register-ArgumentCompleter -CommandName wt-feature -ParameterName Base -ScriptBlock $script:AllBranchCompleter
+Register-ArgumentCompleter -CommandName wt-fix     -ParameterName Base -ScriptBlock $script:AllBranchCompleter
+
 # Reload a completion/argument-completer (mirrors zsh compreload)
 function global:compreload {
     param([Parameter(Mandatory)][string]$Command)

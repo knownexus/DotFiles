@@ -187,3 +187,99 @@ function global:updated  { git remote update; git rebase origin/develop }
 
 # Clear screen + status
 function global:rs { Clear-Host; git status }
+
+# Returns C:\repos\DriveFurtherAPI from any worktree within that project.
+# The main worktree is always first in the list; its parent is the project root.
+function script:Get-WorktreeProjectRoot {
+    $main = git worktree list --porcelain |
+        Where-Object { $_ -match '^worktree ' } |
+        Select-Object -First 1 |
+        ForEach-Object { $_ -replace '^worktree ', '' }
+    return Split-Path $main -Parent
+}
+
+# Returns all worktree paths for the current repo
+function script:Get-WorktreePaths {
+    git worktree list --porcelain |
+        Where-Object { $_ -match '^worktree ' } |
+        ForEach-Object { $_ -replace '^worktree ', '' }
+}
+
+function global:wt-go {
+    param([Parameter(Mandatory)][string]$Name)
+    $match = Get-WorktreePaths |
+        Where-Object { $_ -like "*$Name*" } |
+        Select-Object -First 1
+    if ($match) { Set-Location $match } else { Write-Host "No worktree matching '$Name'" }
+}
+
+
+function global:wt-list { git worktree list }
+
+# Create a feature worktree at <project-root>\feature\<TicketId>-<Desc>
+function global:wt-feature {
+    param(
+        [Parameter(Mandatory)][string]$TicketId,
+        [Parameter(Mandatory)][string]$Desc,
+        [string]$Base = 'develop'
+    )
+    $root   = Get-WorktreeProjectRoot
+    $wtPath = Join-Path $root "feature\$TicketId-$Desc"
+    git worktree add $wtPath -b "feature/$TicketId-$Desc" $Base
+}
+
+# Create a fix worktree at <project-root>\fix\<TicketId>-<Desc>
+function global:wt-fix {
+    param(
+        [Parameter(Mandatory)][string]$TicketId,
+        [Parameter(Mandatory)][string]$Desc,
+        [string]$Base = 'develop'
+    )
+    $root   = Get-WorktreeProjectRoot
+    $wtPath = Join-Path $root "fix\$TicketId-$Desc"
+    git worktree add $wtPath -b "fix/$TicketId-$Desc" $Base
+}
+
+# Checkout an existing branch into a worktree, preserving path structure.
+# e.g. wt-c feature/ABC-123-foo  →  <project-root>\feature\ABC-123-foo
+function global:wt-c {
+    param([Parameter(Mandatory)][string]$Branch)
+    $root   = Get-WorktreeProjectRoot
+    $wtPath = Join-Path $root ($Branch -replace '/', '\')
+    git worktree add $wtPath $Branch
+}
+
+# Remove a worktree and delete its local branch
+function global:wt-done {
+    param([Parameter(Mandatory)][string]$Name)
+    $match = Get-WorktreePaths |
+        Where-Object { $_ -like "*$Name*" } |
+        Select-Object -First 1
+    if (-not $match) { Write-Host "No worktree matching '$Name'"; return }
+    $branch = git -C $match branch --show-current
+    git worktree remove $match
+    if ($branch) { git branch -d $branch }
+}
+
+function global:wt-done-f {
+    param([Parameter(Mandatory)][string]$Name)
+    $match = Get-WorktreePaths |
+        Where-Object { $_ -like "*$Name*" } |
+        Select-Object -First 1
+    if (-not $match) { Write-Host "No worktree matching '$Name'"; return }
+    $branch = git -C $match branch --show-current
+    git worktree remove --force $match
+    if ($branch) { git branch -D $branch }
+}
+
+# Show git status for every worktree in the current repo
+function global:wt! {
+    Get-WorktreePaths | ForEach-Object {
+        Write-Host "`n=== $_ ===" -ForegroundColor Cyan
+        git -C $_ status --short
+    }
+}
+
+# Prune stale worktree references
+function global:wt-prune { git worktree prune -v }
+

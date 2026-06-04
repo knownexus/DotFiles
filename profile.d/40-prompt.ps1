@@ -1,7 +1,24 @@
 # VCS-aware prompt — mirrors zsh 40-prompt
+# Respects $global:RepoRoot / $global:RepoSymbol (set in 70-variables.ps1).
 # Left:  hostname$
 # Right (same line, right-aligned): path [branch:rev,status]
 # Status flags use the same shorthand as the zsh version: ? A D R M
+
+# Replace $global:RepoRoot prefix with $global:RepoSymbol in a path string.
+# e.g. C:\repos\DriveFurtherAPI\develop  →  #\DriveFurtherAPI\develop
+function script:Get-ShortPath {
+    param([string]$Path)
+    if ($global:RepoRoot -and $global:RepoSymbol) {
+        $root = $global:RepoRoot.TrimEnd('\')
+        if ($Path -ieq $root) {
+            return $global:RepoSymbol
+        }
+        if ($Path.StartsWith($root + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $global:RepoSymbol + $Path.Substring($root.Length)
+        }
+    }
+    return $Path
+}
 
 function script:Get-VcsInfo {
     # Returns a hashtable with Branch, Revno, Flags — or $null outside a repo.
@@ -13,6 +30,10 @@ function script:Get-VcsInfo {
         if (-not $branch) { $branch = git rev-parse --short HEAD 2>$null }
         $revno  = git rev-parse --short=7 HEAD 2>$null
 
+        # A worktree has a .git FILE; the main checkout has a .git DIRECTORY.
+        $gitDotGit  = Join-Path $gitRoot '.git'
+        $isWorktree = Test-Path $gitDotGit -PathType Leaf
+
         $flags = ''
         $porcelain = git status --porcelain 2>$null
         if ($porcelain) {
@@ -23,7 +44,7 @@ function script:Get-VcsInfo {
             if ($porcelain -match '^[M]|^.[M]')     { $flags += 'M' }
         }
 
-        return @{ VCS = 'git'; Branch = $branch; Revno = $revno; Flags = $flags }
+        return @{ VCS = 'git'; Branch = $branch; Revno = $revno; Flags = $flags; IsWorktree = $isWorktree }
     }
 
     # SVN
@@ -48,12 +69,13 @@ function global:prompt {
 
     $hostName = $env:COMPUTERNAME
 
-    $location = "$(Get-Location)"
+    $location = Get-ShortPath "$(Get-Location)"
 
     $vcs = Get-VcsInfo
     if ($vcs) {
         $statusSuffix = if ($vcs.Flags) { ",$($vcs.Flags)" } else { '' }
-        $branchPart   = "[$($vcs.Branch):$($vcs.Revno)$statusSuffix]"
+        $branchLabel  = if ($vcs.IsWorktree) { "wt:$($vcs.Branch)" } else { $vcs.Branch }
+        $branchPart   = "[${branchLabel}:$($vcs.Revno)$statusSuffix]"
         $rightColored = "${yellow}${location}${reset} ${cyan}${branchPart}${reset}"
         $rightPlain   = "$location $branchPart"
     } else {
@@ -74,5 +96,5 @@ function global:prompt {
 
     Write-Host "${esc}[${col}G${rightColored}${esc}[1G" -NoNewline
 
-    return "${blue}${hostName}${reset}`$ "
+    return "${blue}`$ ${reset}"
 }
