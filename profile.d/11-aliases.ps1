@@ -138,3 +138,7 @@ function global:tre {
         Select-Object FullName |
         Format-Table -HideTableHeaders
 }
+function global:brk {
+    $width = $Host.UI.RawUI.WindowSize.Width
+    Write-Host ([string][char]0x2500 * $width) -ForegroundColor DarkGray
+}
