@@ -2,10 +2,72 @@
 # Note: PowerShell function names cannot contain ! so g! becomes gstat, remote! becomes gitremote-reset.
 
 # Status
-# git! is not a valid PS function name — use gstat as the canonical form
-function global:gstat  { git status @args }
-function global:g!     { git status @args }
-function global:git!   { git status @args }
+function global:gstat {
+    $esc    = [char]27
+    $reset  = "${esc}[0m"
+    $bold   = "${esc}[1m"
+    $green  = "${esc}[32m"
+    $red    = "${esc}[31m"
+    $yellow = "${esc}[33m"
+    $cyan   = "${esc}[36m"
+    $gray   = "${esc}[90m"
+
+    $branch = git symbolic-ref --short HEAD 2>$null
+    if (-not $branch) { $branch = git rev-parse --short HEAD 2>$null }
+    $revno  = git rev-parse --short=7 HEAD 2>$null
+
+    $up = [char]0x2191
+    $dn = [char]0x2193
+    $ahead  = git rev-list --count '@{upstream}..HEAD' 2>$null
+    $behind = git rev-list --count 'HEAD..@{upstream}' 2>$null
+    $aheadStr  = if ($ahead  -and [int]$ahead.Trim()  -gt 0) { " ${green}${up}$($ahead.Trim())${reset}" }  else { '' }
+    $behindStr = if ($behind -and [int]$behind.Trim() -gt 0) { " ${red}${dn}$($behind.Trim())${reset}" } else { '' }
+
+    Write-Host "${bold}branch:${reset} ${cyan}${branch}${reset} ${gray}${revno}${reset}${aheadStr}${behindStr}"
+    Write-Host ''
+
+    $lines     = @(git status --porcelain 2>$null)
+    $staged    = @($lines | Where-Object { $_ -match '^[AMDRC]' })
+    $unstaged  = @($lines | Where-Object { $_ -match '^.[MD]' })
+    $conflicts = @($lines | Where-Object { $_ -match '^(UU|AA|DD|AU|UA|DU|UD)' })
+    $untracked = @($lines | Where-Object { $_ -match '^\?\?' })
+
+    if ($staged.Count -gt 0) {
+        Write-Host "${bold}${green}Staged:${reset}"
+        foreach ($l in $staged) {
+            $label = switch ($l[0]) { 'A'{'new file'}; 'M'{'modified'}; 'D'{'deleted '}; 'R'{'renamed '}; 'C'{'copied  '}; default{$l[0]} }
+            Write-Host "  ${green}${label}:${reset} $($l.Substring(3))"
+        }
+        Write-Host ''
+    }
+
+    if ($unstaged.Count -gt 0) {
+        Write-Host "${bold}${red}Unstaged:${reset}"
+        foreach ($l in $unstaged) {
+            $label = switch ($l[1]) { 'M'{'modified'}; 'D'{'deleted '}; default{$l[1]} }
+            Write-Host "  ${red}${label}:${reset} $($l.Substring(3))"
+        }
+        Write-Host ''
+    }
+
+    if ($conflicts.Count -gt 0) {
+        Write-Host "${bold}${yellow}Conflicts:${reset}"
+        foreach ($l in $conflicts) { Write-Host "  ${yellow}conflict:${reset} $($l.Substring(3))" }
+        Write-Host ''
+    }
+
+    if ($untracked.Count -gt 0) {
+        Write-Host "${bold}${gray}Untracked:${reset}"
+        foreach ($l in $untracked) { Write-Host "  ${gray}$($l.Substring(3))${reset}" }
+        Write-Host ''
+    }
+
+    if ($lines.Count -eq 0) {
+        Write-Host "${green}Nothing to commit, working tree clean${reset}"
+    }
+}
+function global:g!   { gstat }
+function global:git! { gstat }
 
 # Add
 function global:ga     { git add @args }
@@ -49,19 +111,100 @@ function global:gitres { git checkout -- @args }
 # Log
 # gl is a built-in alias for Get-Location — remove it so our version wins
 Remove-Item -Path Alias:gl -Force -ErrorAction SilentlyContinue
-function global:git-log { git log @args }
-Set-Alias -Name gl   -Value git-log -Force -Option AllScope
-Set-Alias -Name gitl -Value git-log -Force -Option AllScope
 
-# Pretty graph log (mirrors gitlg / gitlg2)
-function global:gitlg {
-    git log --graph --abbrev-commit --decorate `
-        '--format=format:%C(bold blue)%h%C(reset) - %C(bold cyan)%aD%C(reset) %C(bold green)(%ar)%C(reset)%C(bold yellow)%d%C(reset)%n          %C(white)%s%C(reset) %C(dim white)- %an%C(reset)' `
-        --all @args
+$script:_GlFmt = '%C(bold blue)%h%C(reset)  %C(bold green)%<(14)%ar%C(reset)  %C(cyan)%<(20,trunc)%an%C(reset)  %s%C(bold yellow)%d%C(reset)'
+
+$script:_LogColors = @{
+    Esc   = [char]27
+    Up    = [char]0x2191
+    Dn    = [char]0x2193
 }
 
+function script:Write-LogHeader {
+    $esc   = $script:_LogColors.Esc
+    $up    = $script:_LogColors.Up
+    $dn    = $script:_LogColors.Dn
+    $reset = "${esc}[0m"
+    $gray  = "${esc}[90m"
+    $cyan  = "${esc}[36m"
+    $green = "${esc}[32m"
+    $red   = "${esc}[31m"
+
+    $originSha = git rev-parse '@{upstream}' 2>$null
+    if ($LASTEXITCODE -eq 0 -and $originSha) {
+        $originShort  = git rev-parse --short=7 $originSha.Trim()
+        $upstreamName = git rev-parse --abbrev-ref '@{upstream}' 2>$null
+        $ahead  = git rev-list --count '@{upstream}..HEAD' 2>$null
+        $behind = git rev-list --count 'HEAD..@{upstream}' 2>$null
+        $aheadStr  = if ($ahead  -and [int]$ahead.Trim()  -gt 0) { "  ${cyan}${up}$($ahead.Trim()) ahead${reset}" }  else { '' }
+        $behindStr = if ($behind -and [int]$behind.Trim() -gt 0) { "  ${red}${dn}$($behind.Trim()) behind${reset}" } else { '' }
+        Write-Host "${gray}origin:${reset} ${cyan}${originShort}${reset} ${gray}(${upstreamName})${reset}${aheadStr}${behindStr}"
+    }
+
+    $branch   = git symbolic-ref --short HEAD 2>$null
+    $headFull = git rev-parse HEAD 2>$null
+    foreach ($candidate in @('develop', 'master', 'main', 'origin/develop', 'origin/master', 'origin/main')) {
+        if ($candidate -eq $branch -or $candidate -eq "origin/$branch") { continue }
+        $mergeSha = git merge-base HEAD $candidate 2>$null
+        if ($LASTEXITCODE -eq 0 -and $mergeSha -and $mergeSha.Trim() -ne $headFull.Trim()) {
+            $baseShort   = git rev-parse --short=7 $mergeSha.Trim()
+            $commitCount = git rev-list --count "$($mergeSha.Trim())..HEAD" 2>$null
+            Write-Host "${gray}base:${reset}   ${green}${baseShort}${reset} ${gray}(${candidate})${reset}  ${gray}${commitCount} commit(s) on this branch${reset}"
+            break
+        }
+    }
+
+    Write-Host ''
+}
+
+# Pretty log — auto-fits terminal height, no pager
+function global:gl {
+    # Pre-count header lines so we can compute the limit before printing anything
+    $headerLines = 1  # blank line always emitted
+    git rev-parse '@{upstream}' 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { $headerLines++ }
+    $branch   = git symbolic-ref --short HEAD 2>$null
+    $headFull = git rev-parse HEAD 2>$null
+    foreach ($candidate in @('develop', 'master', 'main', 'origin/develop', 'origin/master', 'origin/main')) {
+        if ($candidate -eq $branch -or $candidate -eq "origin/$branch") { continue }
+        $mergeSha = git merge-base HEAD $candidate 2>$null
+        if ($LASTEXITCODE -eq 0 -and $mergeSha -and $mergeSha.Trim() -ne $headFull.Trim()) {
+            $headerLines++
+            break
+        }
+    }
+
+    $available = $Host.UI.RawUI.WindowSize.Height - $headerLines - 3  # prompt blank + prompt + buffer
+    $limit     = [int][Math]::Max(1, [Math]::Floor($available / 5) - 1)
+
+    script:Write-LogHeader
+    git log --color=always "--max-count=$limit" `
+        '--format=tformat:%C(yellow)%H%C(reset)%C(auto)%d%C(reset)%n%C(brightblack)%an <%ae>  %ad%C(reset)%n%n%C(249)%w(0,4,4)%B%C(reset)' `
+        '--date=format:%a %d/%m/%y %H:%M' `
+        @args
+}
+Set-Alias -Name gitl -Value gl -Force -Option AllScope
+
+# Pretty log — with per-commit file stats
+function global:gl2 {
+    script:Write-LogHeader
+    git log --color=always --shortstat `
+        '--format=tformat:%C(yellow)%H%C(reset)%C(auto)%d%C(reset)%n%C(brightblack)%an <%ae>  %ad%C(reset)%n%n%C(249)%w(0,4,4)%B%C(reset)' `
+        '--date=format:%a %d/%m/%y %H:%M' `
+        @args | less -RX
+}
+Set-Alias -Name gitl2 -Value gl2 -Force -Option AllScope
+
+# Graph log — tree on the left, compact detail on the right, scrollable
+function global:gitlg {
+    git log --graph --abbrev-commit --decorate --all --color=always `
+        "--format=format:%C(bold blue)%h%C(reset)  %C(bold green)%<(14)%ar%C(reset)  %C(cyan)%<(20,trunc)%an%C(reset)  %s%C(bold yellow)%d%C(reset)" `
+        @args | less -RX
+}
+
+# Ultra-compact graph (hash + subject + refs only)
 function global:gitlg2 {
-    git log --oneline --graph --decorate --all @args
+    git log --oneline --graph --decorate --all --color=always @args
 }
 
 # Show
