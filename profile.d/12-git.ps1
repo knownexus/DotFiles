@@ -75,6 +75,34 @@ function global:gita   { git add @args }
 function global:gau     { git add -u @args }
 function global:gitau   { git add -u @args }
 
+# Archive
+function global:gar {
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$RepoName
+    )
+
+    if (-not (git rev-parse --is-inside-work-tree 2>$null)) {
+        Write-Error "Not inside a git repository."
+        return
+    }
+
+    if (-not $RepoName) {
+        $RepoName = Split-Path -Leaf (git rev-parse --show-toplevel)
+    }
+
+
+    $RepoName = ($RepoName -replace '\s+', '_')   # <-- add this
+
+
+    $hash = git rev-parse --short HEAD
+    $out  = "$RepoName-$hash.zip"
+
+    git archive --format=zip HEAD -o $out
+    Write-Host "Created $out ($([math]::Round((Get-Item $out).Length / 1MB, 1)) MB)"
+}
+
+
 # Whitespace-ignoring staged apply
 function global:gaw    { git diff -w | git apply --cached --ignore-whitespace }
 function global:gaw1   {
