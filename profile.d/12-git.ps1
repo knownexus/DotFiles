@@ -91,6 +91,7 @@ Remove-Item -Path Alias:gc -Force -ErrorAction SilentlyContinue
 function global:git-commit { git commit @args }
 Set-Alias -Name gc -Value git-commit -Force -Option AllScope
 function global:gitca  { git commit --amend @args }
+function global:gca  { git commit --amend @args }
 function global:gitcm  { git commit -m @args }
 function global:uncommit { git reset --soft HEAD^ }
 
@@ -188,10 +189,45 @@ Set-Alias -Name gitl -Value gl -Force -Option AllScope
 # Pretty log — with per-commit file stats
 function global:gl2 {
     script:Write-LogHeader
+    $esc        = [char]27
+    $reset      = "${esc}[0m"
+    $gray       = "${esc}[90m"
+    $green      = "${esc}[32m"
+    $red        = "${esc}[31m"
+    $pendingSha = $null
+    $buffer     = [System.Collections.Generic.List[string]]::new()
     git log --color=always --shortstat `
-        '--format=tformat:%C(yellow)%H%C(reset)%C(auto)%d%C(reset)%n%C(brightblack)%an <%ae>  %ad%C(reset)%n%n%C(249)%w(0,4,4)%B%C(reset)' `
+        '--format=tformat:%C(yellow)%H%C(reset)%C(auto)%d%C(reset)%n%C(brightblack)%an <%ae>  %ad%C(reset)%n%n%C(249)%w(0,4,4)%B%w(0,0,0)%C(reset)%n>>END<<' `
         '--date=format:%a %d/%m/%y %H:%M' `
-        @args | less -RX
+        @args |
+    ForEach-Object {
+        if ($_ -match '^(\e\[\d+m|\e\[\d+;\d+m)*[0-9a-f]{40}') {
+            # Flush previous commit if it had no stat
+            if ($pendingSha) {
+                $pendingSha
+                foreach ($line in $buffer) { $line }
+                $buffer.Clear()
+            }
+            $pendingSha = $_
+        } elseif ($_ -match '>>END<<') {
+            # Just consume it — stat arrives after the following blank line
+        } elseif ($_ -match '^\s*(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?') {
+            $f = $Matches[1]
+            $i = if ($Matches[2]) { $Matches[2] } else { '0' }
+            $d = if ($Matches[3]) { $Matches[3] } else { '0' }
+            $stat = "  ${gray}${f}f ${green}+${i}${reset} ${red}-${d}${reset}"
+            "$pendingSha$stat"
+            $pendingSha = $null
+            foreach ($line in $buffer) { $line }
+            $buffer.Clear()
+        } else {
+            if ($pendingSha) {
+                $buffer.Add($_)
+            } else {
+                $_
+            }
+        }
+    } | less -RX
 }
 Set-Alias -Name gitl2 -Value gl2 -Force -Option AllScope
 

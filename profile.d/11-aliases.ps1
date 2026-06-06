@@ -16,6 +16,9 @@ function global:Invoke-Search {
     grep -rn --color=always $excludeArgs $Pattern $Path
 }
 
+Remove-Item Alias:r  -Force -ErrorAction SilentlyContinue
+Set-Alias -Name r -Value Clear-Host -Force -Option AllScope
+
 # g  — search with full exclusion list
 function global:g  { Invoke-Search @args }
 
