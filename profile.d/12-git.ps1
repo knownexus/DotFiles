@@ -319,15 +319,17 @@ function global:grpo   { git remote prune origin }
 function global:giturl { git config --get remote.origin.url }
 
 # Hard-reset to remote HEAD (mirrors remote!)
+# Uses fetch + FETCH_HEAD rather than remote update + origin/<branch>
+# so it works even when the tracking ref isn't configured (e.g. uat, hotfix branches).
 function global:gitremote-reset {
     $branch = git rev-parse --abbrev-ref HEAD
-    git remote update
-    git reset --hard "origin/$branch"
+    git fetch origin $branch
+    git reset --hard FETCH_HEAD
 }
 function global:remote! {
     $branch = git rev-parse --abbrev-ref HEAD
-    git remote update
-    git reset --hard "origin/$branch"
+    git fetch origin $branch
+    git reset --hard FETCH_HEAD
 }
 
 function global:grh    { git reset --hard @args }
@@ -336,9 +338,29 @@ function global:grh    { git reset --hard @args }
 # Rebase helpers
 function global:grd    { git rebase develop @args }
 function global:grm    { git rebase master @args }
-function global:gro    { git rebase origin @args }
-function global:groi   { git rebase origin -i @args }
-function global:grod   { git rebase origin/develop @args }
+function global:gro {
+    $branch = git rev-parse --abbrev-ref HEAD
+    git fetch origin $branch
+    git rebase FETCH_HEAD @args
+}
+function global:groi {
+    $branch = git rev-parse --abbrev-ref HEAD
+    git fetch origin $branch
+    git rebase -i FETCH_HEAD @args
+}
+function global:grod {
+    git fetch origin develop
+    git rebase FETCH_HEAD @args
+}
+
+# Fetch a remote branch then rebase onto it — works even without a local tracking ref.
+# Usage: grof epic/policy-list-...   OR   grof origin/epic/policy-list-...
+function global:grof {
+    param([Parameter(Mandatory)][string]$Branch)
+    $remote = $Branch -replace '^origin/', ''
+    git fetch origin $remote
+    git rebase FETCH_HEAD
+}
 function global:gitra  { git rebase --abort }
 function global:gitrc  { git rebase --continue }
 function global:gitra2 { git rebase --abort }
@@ -389,19 +411,31 @@ function global:ignoreme     { git update-index --assume-unchanged @args }
 function global:dontignoreme { git update-index --no-assume-unchanged @args }
 
 # Update shortcuts
-function global:update   { git remote update; git rebase origin }
-function global:updated  { git remote update; git rebase origin/develop }
+function global:update {
+    $branch = git rev-parse --abbrev-ref HEAD
+    git fetch origin $branch
+    git rebase FETCH_HEAD
+}
+function global:updated {
+    git fetch origin develop
+    git rebase FETCH_HEAD
+}
 
 # Clear screen + status
 function global:rs { Clear-Host; git status }
 
-# Returns C:\repos\DriveFurtherAPI from any worktree within that project.
-# The main worktree is always first in the list; its parent is the project root.
+# Returns the project root from any worktree within that project.
+# Supports two layouts:
+#   Standard repo  — main worktree has a .git directory → main worktree IS the root
+#   Bare-ish repo  — main worktree has a .git file / no .git  → parent of main worktree is the root
 function script:Get-WorktreeProjectRoot {
     $main = git worktree list --porcelain |
         Where-Object { $_ -match '^worktree ' } |
         Select-Object -First 1 |
         ForEach-Object { $_ -replace '^worktree ', '' }
+    if (Test-Path (Join-Path $main '.git') -PathType Container) {
+        return $main
+    }
     return Split-Path $main -Parent
 }
 
@@ -489,4 +523,18 @@ function global:wt! {
 
 # Prune stale worktree references
 function global:wt-prune { git worktree prune -v }
+
+# Fix repos missing a fetch refspec (common when set up via git remote add rather than git clone).
+# Scans all direct subdirectories of C:\repos, adds the standard refspec if absent, then fetches.
+function global:fix-fetch-refspecs {
+    param([string]$Root = 'C:\repos')
+    Get-ChildItem $Root -Directory | ForEach-Object {
+        $fetch = git -C $_.FullName config --get-all remote.origin.fetch 2>$null
+        if (-not $fetch) {
+            Write-Host "Fixing: $($_.Name)" -ForegroundColor Yellow
+            git -C $_.FullName config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+            git -C $_.FullName remote update
+        }
+    }
+}
 

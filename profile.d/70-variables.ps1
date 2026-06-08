@@ -14,3 +14,11 @@ if (-not $env:EDITOR)        { $env:EDITOR = $env:VISUAL }
 # ---------------------------------------------------------------------------
 $global:RepoRoot   = 'C:\repos'
 $global:RepoSymbol = '#'
+
+# ---------------------------------------------------------------------------
+# Claude API model selection — used by 13-claude.ps1.
+# API key must be set as a user-level env var (never committed here):
+#   [Environment]::SetEnvironmentVariable('ANTHROPIC_API_KEY', 'sk-ant-...', 'User')
+# ---------------------------------------------------------------------------
+$global:ClaudeModel     = 'claude-sonnet-4-6'          # ai-pr, ai-review
+$global:ClaudeModelFast = 'claude-haiku-4-5-20251001'  # ai-commit (fast + cheap)
