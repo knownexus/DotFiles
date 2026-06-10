@@ -159,19 +159,22 @@ function script:Write-LogHeader {
     $green = "${esc}[32m"
     $red   = "${esc}[31m"
 
-    $originSha = git rev-parse '@{upstream}' 2>$null
-    if ($LASTEXITCODE -eq 0 -and $originSha) {
-        $originShort  = git rev-parse --short=7 $originSha.Trim()
-        $upstreamName = git rev-parse --abbrev-ref '@{upstream}' 2>$null
-        $ahead  = git rev-list --count '@{upstream}..HEAD' 2>$null
-        $behind = git rev-list --count 'HEAD..@{upstream}' 2>$null
-        $aheadStr  = if ($ahead  -and [int]$ahead.Trim()  -gt 0) { "  ${cyan}${up}$($ahead.Trim()) ahead${reset}" }  else { '' }
-        $behindStr = if ($behind -and [int]$behind.Trim() -gt 0) { "  ${red}${dn}$($behind.Trim()) behind${reset}" } else { '' }
-        Write-Host "${gray}origin:${reset} ${cyan}${originShort}${reset} ${gray}(${upstreamName})${reset}${aheadStr}${behindStr}"
+    # Single subprocess for branch, upstream, ahead/behind, and HEAD sha
+    $statusLines = git status --porcelain=v2 --branch 2>$null
+    $branch   = ($statusLines | Where-Object { $_ -match '^# branch\.head ' })     -replace '^# branch\.head ', ''
+    $headFull = ($statusLines | Where-Object { $_ -match '^# branch\.oid ' })      -replace '^# branch\.oid ', ''
+    $upstream = ($statusLines | Where-Object { $_ -match '^# branch\.upstream ' }) -replace '^# branch\.upstream ', ''
+    $ab       = ($statusLines | Where-Object { $_ -match '^# branch\.ab ' })       -replace '^# branch\.ab ', ''
+
+    if ($upstream) {
+        $originShort = git rev-parse --short=7 '@{upstream}' 2>$null
+        $ahead  = if ($ab -match '\+(\d+)') { $Matches[1] } else { '0' }
+        $behind = if ($ab -match '-(\d+)') { $Matches[1] } else { '0' }
+        $aheadStr  = if ([int]$ahead  -gt 0) { "  ${cyan}${up}${ahead} ahead${reset}" }  else { '' }
+        $behindStr = if ([int]$behind -gt 0) { "  ${red}${dn}${behind} behind${reset}" } else { '' }
+        Write-Host "${gray}origin:${reset} ${cyan}${originShort}${reset} ${gray}(${upstream})${reset}${aheadStr}${behindStr}"
     }
 
-    $branch   = git symbolic-ref --short HEAD 2>$null
-    $headFull = git rev-parse HEAD 2>$null
     foreach ($candidate in @('develop', 'master', 'main', 'origin/develop', 'origin/master', 'origin/main')) {
         if ($candidate -eq $branch -or $candidate -eq "origin/$branch") { continue }
         $mergeSha = git merge-base HEAD $candidate 2>$null
@@ -186,31 +189,13 @@ function script:Write-LogHeader {
     Write-Host ''
 }
 
-# Pretty log — auto-fits terminal height, no pager
+# Pretty log — scrollable via less
 function global:gl {
-    # Pre-count header lines so we can compute the limit before printing anything
-    $headerLines = 1  # blank line always emitted
-    git rev-parse '@{upstream}' 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) { $headerLines++ }
-    $branch   = git symbolic-ref --short HEAD 2>$null
-    $headFull = git rev-parse HEAD 2>$null
-    foreach ($candidate in @('develop', 'master', 'main', 'origin/develop', 'origin/master', 'origin/main')) {
-        if ($candidate -eq $branch -or $candidate -eq "origin/$branch") { continue }
-        $mergeSha = git merge-base HEAD $candidate 2>$null
-        if ($LASTEXITCODE -eq 0 -and $mergeSha -and $mergeSha.Trim() -ne $headFull.Trim()) {
-            $headerLines++
-            break
-        }
-    }
-
-    $available = $Host.UI.RawUI.WindowSize.Height - $headerLines - 3  # prompt blank + prompt + buffer
-    $limit     = [int][Math]::Max(1, [Math]::Floor($available / 5) - 1)
-
     script:Write-LogHeader
-    git log --color=always "--max-count=$limit" `
+    git log --color=always `
         '--format=tformat:%C(yellow)%H%C(reset)%C(auto)%d%C(reset)%n%C(brightblack)%an <%ae>  %ad%C(reset)%n%n%C(249)%w(0,4,4)%B%C(reset)' `
         '--date=format:%a %d/%m/%y %H:%M' `
-        @args
+        @args | less -RX
 }
 Set-Alias -Name gitl -Value gl -Force -Option AllScope
 
@@ -538,3 +523,116 @@ function global:fix-fetch-refspecs {
     }
 }
 
+function New-GitWorktreeSetup {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Branches,
+
+        [Parameter()]
+        [string]$Name,
+
+        [Parameter()]
+        [string]$CloneUrl,
+
+        [Parameter()]
+        [string]$Path = (Get-Location).Path
+    )
+
+    # ── Clone if a URL was provided ──────────────────────────────────────────
+    if ($CloneUrl) {
+        # Derive repo name from URL (strip .git suffix)
+        $repoName = [System.IO.Path]::GetFileNameWithoutExtension($CloneUrl.TrimEnd('/').Split('/')[-1])
+        if (-not $Name) { $Name = $repoName }
+
+        $cloneTarget = Join-Path $Path "$Name\.git-main"
+
+        Write-Host "Cloning $CloneUrl into $cloneTarget..." -ForegroundColor Cyan
+
+        # Clone as a bare repo so worktrees don't fight over a working tree
+        git clone --bare $CloneUrl $cloneTarget
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Clone failed."
+            return
+        }
+
+        # Fix up the remote fetch refspec so `git fetch` works normally from bare clones
+        git -C $cloneTarget config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+        git -C $cloneTarget fetch --all --quiet
+
+        $gitRoot = $cloneTarget
+    }
+    else {
+        # ── Use existing repo ────────────────────────────────────────────────
+        $gitRoot = git -C $Path rev-parse --show-toplevel 2>$null
+        if (-not $gitRoot) {
+            Write-Error "Not inside a git repository: $Path. Use -CloneUrl to clone one."
+            return
+        }
+
+        if (-not $Name) {
+            $Name = Split-Path $gitRoot -Leaf
+        }
+    }
+
+    # ── Create top-level workspace directory ─────────────────────────────────
+    # Workspace sits alongside the .git-main folder (or the existing repo's parent)
+    $parentDir    = Split-Path $gitRoot -Parent
+    $workspaceDir = $parentDir  # worktree subdirs go directly in the named folder
+
+    if ($CloneUrl) {
+        # $parentDir is already $Path\$Name — worktrees go there too
+        $workspaceDir = $parentDir
+    }
+    else {
+        $workspaceDir = Join-Path (Split-Path $gitRoot -Parent) $Name
+        if (Test-Path $workspaceDir) {
+            Write-Error "Workspace directory already exists: $workspaceDir"
+            return
+        }
+        New-Item -ItemType Directory -Path $workspaceDir | Out-Null
+    }
+
+    Write-Host "Workspace: $workspaceDir" -ForegroundColor Green
+
+    # ── Add a worktree for each branch ────────────────────────────────────────
+    foreach ($branch in $Branches) {
+        $safeName    = $branch -replace '[/\\]', '-'
+        $worktreeDir = Join-Path $workspaceDir $safeName
+
+        $localExists  = git -C $gitRoot rev-parse --verify $branch           2>$null
+        $remoteExists = git -C $gitRoot rev-parse --verify "origin/$branch"  2>$null
+
+        if ($localExists) {
+            Write-Host "  [$branch] existing local branch" -ForegroundColor Cyan
+            git -C $gitRoot worktree add $worktreeDir $branch
+        }
+        elseif ($remoteExists) {
+            Write-Host "  [$branch] tracking remote branch" -ForegroundColor Cyan
+            git -C $gitRoot worktree add --track -b $branch $worktreeDir "origin/$branch"
+        }
+        else {
+            Write-Host "  [$branch] new branch" -ForegroundColor Yellow
+            git -C $gitRoot worktree add -b $branch $worktreeDir
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "  Failed to create worktree for '$branch'"
+        }
+        else {
+            Write-Host "    -> $worktreeDir" -ForegroundColor DarkGray
+        }
+    }
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    Write-Host ""
+    Write-Host "Done. Layout:" -ForegroundColor Green
+    Write-Host "  $workspaceDir"
+    Write-Host "    .git-main\  (bare repo)"
+    Get-ChildItem $workspaceDir -Directory | Where-Object { $_.Name -ne '.git-main' } | ForEach-Object {
+        Write-Host "    $($_.Name)\"
+    }
+}
+
+Set-Alias wt-setup New-GitWorktreeSetup
