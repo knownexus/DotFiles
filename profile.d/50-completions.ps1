@@ -14,7 +14,30 @@ if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
     $rlVersion = (Get-Module PSReadLine).Version
     if ($rlVersion -ge [version]'2.1') {
         Set-PSReadLineOption -PredictionSource History
-        Set-PSReadLineOption -PredictionViewStyle ListView
+        Set-PSReadLineOption -PredictionViewStyle InlineView
+    }
+
+    # ---------------------------------------------------------------------------
+    # Inline signature predictor — requires PowerShell 7.2+ and PSReadLine 2.2+.
+    # Built from C:\repos\pwsh\sig-predictor\ — run once to compile:
+    #   dotnet build C:\repos\pwsh\sig-predictor
+    # ---------------------------------------------------------------------------
+    if ($PSVersionTable.PSVersion -ge [version]'7.2' -and $rlVersion -ge [version]'2.2') {
+        $sigDll = 'C:\repos\pwsh\sig-predictor\bin\Release\net10.0\SignatureHintPredictor.dll'
+        if ((Test-Path $sigDll) -and
+            -not ([System.Management.Automation.PSTypeName]'SignatureHintPredictor').Type) {
+            try {
+                Add-Type -Path $sigDll -ErrorAction Stop
+                [System.Management.Automation.Subsystem.SubsystemManager]::RegisterSubsystem(
+                    [System.Management.Automation.Subsystem.SubsystemKind]::CommandPredictor,
+                    [SignatureHintPredictor]::new()
+                )
+                Set-PSReadLineOption -PredictionSource HistoryAndPlugin
+            }
+            catch {
+                Write-Warning "SignatureHintPredictor: failed to load — $_"
+            }
+        }
     }
 }
 

@@ -128,6 +128,59 @@ function global:gdf    { git diff @args }
 function global:gdfs   { git diff --staged @args }
 function global:gdf1   { git diff HEAD~1 @args }
 
+# Find changes made in commit A that were undone in commit B.
+# Usage: grev <commit-a> <commit-b>
+function global:grev {
+    param(
+        [Parameter(Mandatory, Position = 0)][string]$CommitA,
+        [Parameter(Mandatory, Position = 1)][string]$CommitB
+    )
+
+    function _GetDiffLines {
+        param([string]$Commit, [char]$Sign)
+        git show $Commit |
+            Where-Object { $_.Length -gt 1 -and $_[0] -eq $Sign -and $_[1] -ne $Sign } |
+            ForEach-Object { $_.Substring(1) } |
+            Where-Object { $_.Trim() -ne '' } |
+            Sort-Object -Unique
+    }
+
+    $shaA = git rev-parse --short $CommitA 2>$null
+    $shaB = git rev-parse --short $CommitB 2>$null
+    if (-not $shaA) { Write-Error "Could not resolve commit: $CommitA"; return }
+    if (-not $shaB) { Write-Error "Could not resolve commit: $CommitB"; return }
+
+    Write-Host "`nA = $shaA  ($CommitA)" -ForegroundColor DarkGray
+    Write-Host "B = $shaB  ($CommitB)`n" -ForegroundColor DarkGray
+
+    $aAdded   = @(_GetDiffLines -Commit $CommitA -Sign '+')
+    $aRemoved = @(_GetDiffLines -Commit $CommitA -Sign '-')
+    $bAdded   = @(_GetDiffLines -Commit $CommitB -Sign '+')
+    $bRemoved = @(_GetDiffLines -Commit $CommitB -Sign '-')
+
+    $reverted = $aAdded   | Where-Object { $bRemoved -contains $_ }
+    $readded  = $aRemoved | Where-Object { $bAdded   -contains $_ }
+    $found    = $false
+
+    if ($reverted) {
+        $found = $true
+        Write-Host "A added these lines — B then removed them:" -ForegroundColor Yellow
+        $reverted | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+        Write-Host ""
+    }
+
+    if ($readded) {
+        $found = $true
+        Write-Host "A removed these lines — B then re-added them:" -ForegroundColor Yellow
+        $readded | ForEach-Object { Write-Host "  + $_" -ForegroundColor Green }
+        Write-Host ""
+    }
+
+    if (-not $found) {
+        Write-Host "No changes from $shaA appear to be undone in $shaB." -ForegroundColor Cyan
+    }
+}
+
 # Checkout / branch
 function global:gitb   { git branch @args }
 function global:gitc   { git checkout @args }

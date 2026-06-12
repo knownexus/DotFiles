@@ -11,6 +11,20 @@ if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
     Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
     Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
 
+    # Reset any keys that may have been bound by a previous profile version
+    Set-PSReadLineKeyHandler -Key Spacebar -ScriptBlock {
+        param($key, $arg)
+        [Microsoft.PowerShell.PSConsoleReadLine]::Insert(' ')
+    }
+    Set-PSReadLineKeyHandler -Key Enter -ScriptBlock {
+        param($key, $arg)
+        [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
+    }
+    Set-PSReadLineKeyHandler -Key Escape -ScriptBlock {
+        param($key, $arg)
+        [Microsoft.PowerShell.PSConsoleReadLine]::RevertLine()
+    }
+
     # Ctrl+D: exit when buffer is empty, otherwise delete char (mirrors clever_logout_widget)
     Set-PSReadLineKeyHandler -Chord Ctrl+d -ScriptBlock {
         param($key, $arg)
@@ -24,4 +38,5 @@ if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
             [Microsoft.PowerShell.PSConsoleReadLine]::DeleteChar()
         }
     }
+
 }
