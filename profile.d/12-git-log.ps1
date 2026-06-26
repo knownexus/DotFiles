@@ -1,4 +1,4 @@
-# Git log — gl, gl2, gitlg, gitlg2
+﻿# Git log — gl, gl2, gitlg, gitlg2
 
 # gl is a built-in alias for Get-Location — remove it so our version wins
 Remove-Item -Path Alias:gl -Force -ErrorAction SilentlyContinue

@@ -1,4 +1,4 @@
-# Git branch — branch, checkout, stash, cherry-pick, clean
+﻿# Git branch — branch, checkout, stash, cherry-pick, clean
 
 # Branch
 function global:gitb { git branch @args }

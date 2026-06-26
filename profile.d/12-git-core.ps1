@@ -1,4 +1,4 @@
-# Git core — status, blame, add, archive, commit, diff, restore, show, reset, misc
+﻿# Git core — status, blame, add, archive, commit, diff, restore, show, reset, misc
 
 # Shared guard — returns $true if inside a git repo, otherwise prints a message and returns $false.
 function global:Assert-GitRepo {

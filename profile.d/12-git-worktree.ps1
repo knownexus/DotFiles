@@ -1,4 +1,4 @@
-# Git worktree — worktree management and multi-repo workspace
+﻿# Git worktree — worktree management and multi-repo workspace
 
 # Returns the project root from any worktree within that project.
 # Supports two layouts:

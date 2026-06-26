@@ -1,4 +1,4 @@
-# Git revert — detect and clean up changes that were later reverted
+﻿# Git revert — detect and clean up changes that were later reverted
 
 # Find changes made in commit A that were undone in commit B.
 # Usage: grev <commit-a> <commit-b>

@@ -1,4 +1,4 @@
-# Git remote — fetch, pull, push, remote operations
+﻿# Git remote — fetch, pull, push, remote operations
 
 # Fetch / pull
 function global:gitf  { git fetch @args }
