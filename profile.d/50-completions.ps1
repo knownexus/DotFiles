@@ -1,4 +1,4 @@
-# Tab completion -- mirrors zsh 50-completions
+﻿# Tab completion -- mirrors zsh 50-completions
 
 if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
     Import-Module PSReadLine -ErrorAction SilentlyContinue
@@ -27,7 +27,14 @@ if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
         if ((Test-Path $sigDll) -and
             -not ([System.Management.Automation.PSTypeName]'SignatureHintPredictor').Type) {
             try {
-                Add-Type -Path $sigDll -ErrorAction Stop
+                # Shadow-copy so the build output is never locked by a running PS session.
+                # Include the PID so concurrent sessions each get their own copy.
+                $tmpDll = [System.IO.Path]::Combine(
+                    [System.IO.Path]::GetTempPath(),
+                    "SignatureHintPredictor_$([System.Diagnostics.Process]::GetCurrentProcess().Id).dll"
+                )
+                Copy-Item $sigDll $tmpDll -Force -ErrorAction Stop
+                Add-Type -Path $tmpDll -ErrorAction Stop
                 [System.Management.Automation.Subsystem.SubsystemManager]::RegisterSubsystem(
                     [System.Management.Automation.Subsystem.SubsystemKind]::CommandPredictor,
                     [SignatureHintPredictor]::new()
@@ -38,6 +45,18 @@ if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
                 Write-Warning "SignatureHintPredictor: failed to load — $_"
             }
         }
+    }
+}
+
+# Rebuild the signature predictor and reload the profile to pick up changes
+function global:build-predictor {
+    dotnet build 'C:\repos\pwsh\sig-predictor' -c Release --nologo -v q
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host 'Build succeeded — reloading profile...' -ForegroundColor Green
+        . $PROFILE
+    }
+    else {
+        Write-Warning 'Build failed — profile not reloaded.'
     }
 }
 

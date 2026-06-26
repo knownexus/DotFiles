@@ -146,3 +146,6 @@ function global:brk {
     $width = $Host.UI.RawUI.WindowSize.Width
     Write-Host ([string][char]0x2500 * $width) -ForegroundColor DarkGray
 }
+
+# Explorer
+function global:merge-explorer { & 'C:\repos\pwsh\scripts\consolidate-explorer.ps1' }

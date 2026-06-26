@@ -119,6 +119,7 @@ profile.d/
 | `gaw` | apply whitespace-ignoring diff to index |
 | `ignoreme` | `git update-index --assume-unchanged` |
 | `dontignoreme` | `git update-index --no-assume-unchanged` |
+| `localignore` | append pattern(s) to `.git/info/exclude` (local-only, never committed) |
 | `update` | remote update + rebase origin |
 | `updated` | remote update + rebase origin/develop |
 | `rs` | clear screen + `git status` |

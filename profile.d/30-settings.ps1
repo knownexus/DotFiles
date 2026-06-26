@@ -10,7 +10,12 @@ if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
     Set-PSReadLineOption -MaximumHistoryCount 2000
 
     # Save to a dedicated file (mirrors HISTFILE)
-    Set-PSReadLineOption -HistorySavePath "$HOME\.pwsh_history"
+    # Guard: setting HistorySavePath clears in-memory history and reloads from disk,
+    # so skip it on profile reloads (sb) when it is already pointing at the right file.
+    $historyPath = "$HOME\.pwsh_history"
+    if ((Get-PSReadLineOption).HistorySavePath -ne $historyPath) {
+        Set-PSReadLineOption -HistorySavePath $historyPath
+    }
 
     # Write each command as it's entered (mirrors INC_APPEND_HISTORY)
     Set-PSReadLineOption -HistorySaveStyle SaveIncrementally
