@@ -42,8 +42,10 @@ param (
 
 # Resolve to an absolute path before building any child paths.
 # Without this, a relative $Path produces relative $worktreePath values, and
-# git worktree add resolves them from inside .bare/ — nesting the path incorrectly.
-$Path = [System.IO.Path]::GetFullPath($Path)
+# git worktree add resolves them from inside .bare/ nesting the path incorrectly.
+# Use PowerShell's resolver (not .NET's GetFullPath) so that relative paths like '.'
+# resolve against the current PS location rather than Environment.CurrentDirectory.
+$Path = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
 
 New-Item -ItemType Directory -Path $Path -Force | Out-Null
 Write-Host "Workspace: $Path" -ForegroundColor Cyan

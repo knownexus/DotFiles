@@ -149,6 +149,7 @@ function global:gitrmc { git rm --cached @args }
 function global:gs    { git show @args }
 function global:gits  { git show @args }
 function global:gitsn { git show --name-only @args }
+function global:gsl   { git show --color=always @args | less -R }
 
 # Reset
 function global:grh { git reset --hard @args }

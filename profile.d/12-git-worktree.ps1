@@ -23,8 +23,8 @@ function global:Get-GitWorktreePaths {
 }
 
 function global:wt-go {
-    if (-not (Assert-GitRepo)) { return }
     param([Parameter(Mandatory)][string]$Name)
+    if (-not (Assert-GitRepo)) { return }
     $match = Get-GitWorktreePaths |
         Where-Object { $_ -like "*$Name*" } |
         Select-Object -First 1
@@ -143,6 +143,27 @@ function global:New-GitWorktreeSetup {
         if (-not $Name) { $Name = $repoName }
 
         $cloneTarget = Join-Path $Path "$Name\.git-main"
+
+        # If workspace already has content (e.g. a previous full clone), move it into a
+        # named subdirectory so it becomes part of the worktree layout rather than noise.
+        $potentialWorkspaceDir = Join-Path $Path $Name
+        if (Test-Path $potentialWorkspaceDir) {
+            $existingItems = Get-ChildItem $potentialWorkspaceDir -Force |
+                Where-Object { $_.Name -ne '.git-main' }
+            if ($existingItems) {
+                $existingBranch = $null
+                if (Test-Path (Join-Path $potentialWorkspaceDir '.git') -PathType Container) {
+                    $existingBranch = git -C $potentialWorkspaceDir branch --show-current 2>$null
+                }
+                if (-not $existingBranch) { $existingBranch = 'original' }
+                $salvageDir = Join-Path $potentialWorkspaceDir $existingBranch
+                Write-Host "  Existing content found — relocating to '$existingBranch\'..." -ForegroundColor Yellow
+                New-Item -ItemType Directory -Path $salvageDir -Force | Out-Null
+                Get-ChildItem $potentialWorkspaceDir -Force |
+                    Where-Object { $_.FullName -ne $salvageDir } |
+                    ForEach-Object { Move-Item -Path $_.FullName -Destination $salvageDir -Force }
+            }
+        }
 
         Write-Host "Cloning $CloneUrl into $cloneTarget..." -ForegroundColor Cyan
 

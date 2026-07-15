@@ -1,8 +1,8 @@
 # Git rebase
 
 function global:gri {
-    if (-not (Assert-GitRepo)) { return }
     param([string]$Target = '1')
+    if (-not (Assert-GitRepo)) { return }
     if ($Target -match '^\d+$') {
         git rebase -i "HEAD~$Target"
     } else {
@@ -11,8 +11,8 @@ function global:gri {
 }
 
 function global:grim {
-    if (-not (Assert-GitRepo)) { return }
     param([string]$Target = '1')
+    if (-not (Assert-GitRepo)) { return }
     if ($Target -match '^\d+$') {
         git rebase -i --rebase-merges "HEAD~$Target"
     } else {
