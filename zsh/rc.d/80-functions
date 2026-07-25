@@ -350,10 +350,12 @@ view() {
         # mode whenever it can't positively confirm a real terminal (piped
         # output, some terminal emulators, etc.) — headers/bold/tables are
         # then left as literal #/**/| characters instead of being rendered.
-        # Forcing an explicit style avoids that; override with
-        # `export GLOW_STYLE=light` if your terminal is light-themed.
+        # Forcing an explicit style avoids that. "pink" replaces heading
+        # markers with a clean bar instead of leaving them visible the way
+        # dark/light/dracula do — override with `export GLOW_STYLE=...` for
+        # any other bundled style.
         local f
-        for f in "$@"; do glow -p -s "${GLOW_STYLE:-dark}" "$f"; done
+        for f in "$@"; do glow -p -s "${GLOW_STYLE:-pink}" "$f"; done
     elif (( ${+commands[bat]} )); then
         bat --paging=always "$@"
     else
