@@ -28,3 +28,18 @@ SAVEHIST=1000
 
 # Remove / from the default WORDCHARS
 WORDCHARS=$(echo $WORDCHARS | tr -d '/')
+
+## Directory navigation
+# cd pushes onto the directory stack automatically, so `cd -<Tab>` / `cd -N`
+# can hop back through recently-visited directories without dirs/pushd/popd
+setopt AUTO_PUSHD
+setopt PUSHD_IGNORE_DUPS
+setopt PUSHD_SILENT
+DIRSTACKSIZE=20
+
+# A bare directory name (no `cd`) changes into it
+setopt AUTO_CD
+
+## Typo tolerance
+# Suggest a correction for a misspelled command name ("did you mean grev?")
+setopt CORRECT
