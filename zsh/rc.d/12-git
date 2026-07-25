@@ -465,20 +465,47 @@ updated() {
 # Worktree helpers
 # ---------------------------------------------------------------------------
 
+# Resolves the git-dir to query worktrees from: the current repo if we're
+# already inside one, or a wt-setup/wt-workspace bare dir (.git-main or
+# .bare) if we're sitting at a workspace root instead — not yet inside any
+# specific worktree, which is the natural place to run wt-go/wt! from.
+_wt_gitdir() {
+    if git rev-parse --git-dir &>/dev/null; then
+        git rev-parse --git-dir
+    elif [[ -d .git-main ]]; then
+        echo ".git-main"
+    elif [[ -d .bare ]]; then
+        echo ".bare"
+    else
+        return 1
+    fi
+}
+
 # Returns the project root (bare or standard layout)
 _wt_project_root() {
-    local main
-    main=$(git worktree list --porcelain | grep '^worktree ' | head -1 | sed 's/^worktree //')
-    if [[ -d "$main/.git" ]]; then
+    local gitdir main
+    gitdir=$(_wt_gitdir) || return 1
+    main=$(git --git-dir="$gitdir" worktree list --porcelain | grep '^worktree ' | head -1 | sed 's/^worktree //')
+    if [[ -z "$main" ]]; then
+        pwd
+    elif [[ -d "$main/.git" ]]; then
         echo "$main"
     else
         dirname "$main"
     fi
 }
 
-# Returns all worktree paths
+# Returns all worktree paths, excluding the bare storage dir itself
+# (.git-main / .bare) — that's never something to wt-go/wt-done into.
 _wt_paths() {
-    git worktree list --porcelain | grep '^worktree ' | sed 's/^worktree //'
+    local gitdir
+    gitdir=$(_wt_gitdir) || return 1
+    git --git-dir="$gitdir" worktree list --porcelain | awk '
+        /^worktree / { path = $0; sub(/^worktree /, "", path); is_bare = 0; next }
+        /^bare$/     { is_bare = 1; next }
+        /^$/         { if (path != "" && !is_bare) print path; path = ""; next }
+        END          { if (path != "" && !is_bare) print path }
+    '
 }
 
 # Navigate to a worktree by partial path name
@@ -495,56 +522,65 @@ wt-go() {
 }
 
 # List all worktrees
-wt-list() { git worktree list; }
+wt-list() {
+    local gitdir
+    gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
+    git --git-dir="$gitdir" worktree list
+}
 
 # Create a feature/ worktree + branch
 wt-feature() {
     local ticket="$1" desc="$2" base="${3:-develop}"
-    local root wtpath
+    local root wtpath gitdir
     root=$(_wt_project_root)
+    gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
     wtpath="$root/feature/$ticket-$desc"
-    git worktree add "$wtpath" -b "feature/$ticket-$desc" "$base"
+    git --git-dir="$gitdir" worktree add "$wtpath" -b "feature/$ticket-$desc" "$base"
 }
 
 # Create a fix/ worktree + branch
 wt-fix() {
     local ticket="$1" desc="$2" base="${3:-develop}"
-    local root wtpath
+    local root wtpath gitdir
     root=$(_wt_project_root)
+    gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
     wtpath="$root/fix/$ticket-$desc"
-    git worktree add "$wtpath" -b "fix/$ticket-$desc" "$base"
+    git --git-dir="$gitdir" worktree add "$wtpath" -b "fix/$ticket-$desc" "$base"
 }
 
 # Check out an existing branch into a new worktree, preserving path structure
 # e.g. wt-c feature/ABC-123-foo  →  <root>/feature/ABC-123-foo
 wt-c() {
     local branch="$1"
-    local root wtpath
+    local root wtpath gitdir
     root=$(_wt_project_root)
+    gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
     wtpath="$root/$branch"
-    git worktree add "$wtpath" "$branch"
+    git --git-dir="$gitdir" worktree add "$wtpath" "$branch"
 }
 
 # Remove a worktree and safe-delete its local branch
 wt-done() {
     local name="$1"
-    local match branch
+    local match branch gitdir
     match=$(_wt_paths | grep "$name" | head -1)
     if [[ -z "$match" ]]; then echo "No worktree matching '$name'" >&2; return 1; fi
+    gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
     branch=$(git -C "$match" branch --show-current)
-    git worktree remove "$match"
-    [[ -n "$branch" ]] && git branch -d "$branch"
+    git --git-dir="$gitdir" worktree remove "$match"
+    [[ -n "$branch" ]] && git --git-dir="$gitdir" branch -d "$branch"
 }
 
 # Force-remove a worktree + hard-delete its branch (unmerged ok)
 wt-done-f() {
     local name="$1"
-    local match branch
+    local match branch gitdir
     match=$(_wt_paths | grep "$name" | head -1)
     if [[ -z "$match" ]]; then echo "No worktree matching '$name'" >&2; return 1; fi
+    gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
     branch=$(git -C "$match" branch --show-current)
-    git worktree remove --force "$match"
-    [[ -n "$branch" ]] && git branch -D "$branch"
+    git --git-dir="$gitdir" worktree remove --force "$match"
+    [[ -n "$branch" ]] && git --git-dir="$gitdir" branch -D "$branch"
 }
 
 # Show git status for every worktree
@@ -558,7 +594,11 @@ _wt_status() {
 alias 'wt!'='_wt_status'
 
 # Prune stale worktree references
-wt-prune() { git worktree prune -v; }
+wt-prune() {
+    local gitdir
+    gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
+    git --git-dir="$gitdir" worktree prune -v
+}
 
 # Set up a multi-worktree workspace
 # Usage: wt-setup <branch,...> [repo-name] [clone-url] [parent-path]
