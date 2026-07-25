@@ -51,17 +51,39 @@ function global:.... { Set-Location ..\..\.. }
 
 $global:OLDPWD = $PWD
 
+<#
+cd pushes onto PowerShell's own location stack (mirrors zsh's AUTO_PUSHD) —
+Pop-Location (built in) undoes the last one. `cd -` still does the plain
+OLDPWD toggle as before; there's no numbered `cd -N` the way zsh has it,
+just the single-step Pop-Location.
+#>
+# Directory stack
 Remove-Item -Path Alias:cd -Force -ErrorAction SilentlyContinue
 function global:cd {
-    if ($args[0] -eq '-') {
+    if ($args.Count -gt 0 -and $args[0] -eq '-') {
         $tmp = $PWD
         Set-Location $global:OLDPWD
         $global:OLDPWD = $tmp
-    } else {
-        $global:OLDPWD = $PWD
-        Set-Location @args
+        return
+    }
+    $global:OLDPWD = $PWD
+    if ($args.Count -gt 0) { Push-Location $args[0] } else { Push-Location $HOME }
+}
+
+# AUTO_CD — a bare directory name (no `cd`) changes into it
+$ExecutionContext.InvokeCommand.CommandNotFoundAction = {
+    param($CommandName, $EventArgs)
+    try {
+        if (Test-Path -LiteralPath $CommandName -PathType Container) {
+            $EventArgs.CommandScriptBlock = { Push-Location $CommandName }.GetNewClosure()
+            $EventArgs.StopSearch = $true
+        }
+    } catch {
+        # Never let a bad path (invalid chars etc.) break command lookup itself
     }
 }
+
+# Editor
 function global:c { claude }
 
 Remove-Item -Path Alias:rp -Force -ErrorAction SilentlyContinue
@@ -90,20 +112,86 @@ function global:vb {
 # Reload profile (mirrors source ~/.zshrc / sb on Linux)
 function global:sb { . $PROFILE }
 
+<#
+rm sends to the Recycle Bin instead of deleting outright (mirrors the zsh
+side's trash-based rm, using the real Windows Recycle Bin instead of a
+manual folder). Restore with trash-restore <name>, or via Explorer;
+permanently clear with trash-empty. Internal config cleanup elsewhere uses
+Remove-Item directly so temp files still delete for real.
+#>
 # Filesystem helpers
-# rm — remove one or more files/dirs; auto-recurses on directories (mirrors bash rm -rf)
 Remove-Item -Path Alias:rm -Force -ErrorAction SilentlyContinue
 function global:rm {
     param([Parameter(Mandatory, ValueFromRemainingArguments)][string[]]$Paths)
+    Add-Type -AssemblyName Microsoft.VisualBasic
     foreach ($p in $Paths) {
-        if (Test-Path $p -PathType Container) {
-            Remove-Item -Recurse -Force $p
-        } else {
-            Remove-Item -Force $p
+        $resolved = Resolve-Path -Path $p -ErrorAction SilentlyContinue
+        if (-not $resolved) {
+            Write-Error "rm: no such file or directory: $p"
+            continue
+        }
+        foreach ($item in $resolved) {
+            $full = $item.Path
+            if (Test-Path $full -PathType Container) {
+                [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(
+                    $full, 'OnlyErrorDialogs', 'SendToRecycleBin')
+            } else {
+                [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile(
+                    $full, 'OnlyErrorDialogs', 'SendToRecycleBin')
+            }
+            Write-Host "Trashed (Recycle Bin): $full"
         }
     }
 }
-function global:rmr { Remove-Item -Recurse -Force @args }
+function global:rmr { rm @args }
+
+# Trash
+function global:trash-restore {
+    param([string]$Name)
+    $shell = New-Object -ComObject Shell.Application
+    $recycleBin = $shell.Namespace(10)
+    if (-not $Name) {
+        Write-Host "In Recycle Bin:"
+        $recycleBin.Items() | ForEach-Object { Write-Host "  $($_.Name)" }
+        return
+    }
+    $item = $recycleBin.Items() | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
+    if (-not $item) {
+        Write-Error "Not found in Recycle Bin: $Name"
+        return
+    }
+    $item.InvokeVerb("undelete")
+    Write-Host "Restored: $Name"
+}
+
+function global:trash-empty {
+    $ans = Read-Host "Permanently empty the Recycle Bin? (y/n)"
+    if ($ans -eq 'y') {
+        Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+        Write-Host "Recycle Bin emptied."
+    } else {
+        Write-Host "Aborted."
+    }
+}
+
+<#
+cp/mv confirm before overwriting. Note: PowerShell's -Confirm prompts for
+every operation (there's no built-in "only if the destination already
+exists" mode the way POSIX cp -i has), so this is a bit more talkative
+than the zsh equivalent — same safety intent, slightly different UX.
+#>
+# Copy / move / clipboard
+Remove-Item -Path Alias:cp -Force -ErrorAction SilentlyContinue
+function global:cp { Copy-Item @args -Confirm }
+Remove-Item -Path Alias:mv -Force -ErrorAction SilentlyContinue
+function global:mv { Move-Item @args -Confirm }
+
+# copy is a built-in alias for Copy-Item — remove it so our version (pipe
+# input to the system clipboard) wins
+Remove-Item -Path Alias:copy -Force -ErrorAction SilentlyContinue
+function global:copy { $input | Set-Clipboard }
+
+# Filesystem helpers
 function global:md  { New-Item -ItemType Directory -Force @args }
 
 function global:touch {
