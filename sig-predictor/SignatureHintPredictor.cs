@@ -16,19 +16,21 @@ public sealed class SignatureHintPredictor : ICommandPredictor
     {
         // File system
         "ls", "l", "ll", "la", "lla", "cd", "mcd", "tre", "rm", "rmr", "md",
-        "touch", "open", "v", "vb", "odx", "odx1", "remspace",
+        "touch", "open", "v", "vb", "odx", "odx1", "remspace", "cp", "mv", "copy", "view",
         // Navigation
         "cdh", "go-repos", "rp", "rpa", "rpam", "rpn", "rpnm", "rpc", "rpp", "rpm", "rpnc",
         // Search
         "g", "g1", "g2", "rgs", "rgs1", "rgs2", "fch", "fchs", "psgrep", "which",
         // Shell
-        "sb", "r", "fr", "path", "brk", "aliases", "gitaliases", "allaliases", "build-predictor",
+        "sb", "r", "fr", "path", "brk", "aliases", "gitaliases", "allaliases", "cheat", "doctor", "build-predictor",
         // Scripts
         "merge-explorer", "grev",
+        // Workspace / trash
+        "repos-status", "trash-restore", "trash-empty",
         // Git — project
         "make-project",
         // Git — status / info
-        "gstat", "g!", "git!", "gbl", "gs", "gits", "gitsn",
+        "gstat", "g!", "git!", "gbl", "gs", "gits", "gitsn", "gsl",
         "gl", "gitl", "gl2", "gitl2", "gitlg", "gitlg2",
         // Git — staging / committing
         "ga", "gita", "gau", "gitau", "gc", "git-commit", "gitca", "gca",
@@ -53,7 +55,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         // Git — misc
         "rs", "update", "updated",
         // Git — worktree
-        "wt-go", "wt-list", "wt-feature", "wt-fix", "wt-c",
+        "wt-go", "wt-gof", "wt-list", "wt-feature", "wt-fix", "wt-c", "gitcf",
         "wt-done", "wt-done-f", "wt!", "wt-prune", "wt-setup", "wt-workspace", "fix-fetch-refspecs",
     };
 
@@ -72,6 +74,8 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "v"                         => new[] { "<file>" },
         "odx" or "odx1"             => new[] { "<file>" },
         "remspace"                  => new[] { "<path>" },
+        "cp" or "mv"                => new[] { "<path>", "<destination>" },
+        "view"                      => new[] { "<file>" },
 
         // ── Search ───────────────────────────────────────────────────────────────
         "g"   or "g1"  or "g2"      => new[] { "<pattern>", "[path]" },
@@ -83,6 +87,10 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         // ── Shell utilities ──────────────────────────────────────────────────────
         "fr"                        => new[] { "<find>", "<replace>", "[path]" },
 
+        // ── Workspace / trash ────────────────────────────────────────────────────
+        "repos-status"              => new[] { "[root]" },
+        "trash-restore"             => new[] { "<name>" },
+
         // ── Git — project ────────────────────────────────────────────────────────
         "make-project"              => new[] { "<name>", "[-Licence MIT|GPL-2|GPL-3|Apache-2|LGPL-2.1]" },
 
@@ -90,6 +98,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "gbl"                       => new[] { "<file>" },
         "gs"  or "gits"             => new[] { "[commit]" },
         "gitsn"                     => new[] { "[commit]" },
+        "gsl"                       => new[] { "[commit]" },
         "gl"  or "gitl"
             or "gl2" or "gitl2"
             or "gitlg" or "gitlg2"  => new[] { "[options]" },
@@ -146,6 +155,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "wt-setup"                  => new[] { "<branches>", "[-Name <n>]", "[-CloneUrl <url>]" },
         "wt-workspace"              => new[] { "-Path", "<path>", "-Repos", "<url,...>", "-Branches", "<branch,...>" },
         "fix-fetch-refspecs"        => new[] { "[root]" },
+        // wt-gof, gitcf, copy, cheat, doctor take no arguments — no entry needed
 
         _                           => null,
     };
