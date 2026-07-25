@@ -114,6 +114,7 @@ function global:gitaliases {
             @('gbl',                      'git blame',                      'annotate each line with last-changing commit'),
             @('gs  gits',                 'git show',                       'inspect a commit, tag, or blob'),
             @('gitsn',                    'git show --name-only',           'list files changed in a commit'),
+            @('gsl',                      'git show | less',                'inspect a commit, paged'),
             @('rs',                       'clear; git status',              'clear screen then show status')
         )
         'Log' = @(
@@ -142,7 +143,7 @@ function global:gitaliases {
         'Restore & reset' = @(
             @('gres  gitres',             'git checkout --',                'discard working tree changes to a file'),
             @('gress',                    'git restore --staged',           'move staged changes back to working tree'),
-            @('grh [commit]',             'git reset --hard',               'discard all changes, optionally to a commit'),
+            @('grh [commit]',             'git reset --hard',               'discard all changes, optionally to a commit (confirms first)'),
             @('gup',                      'git reset HEAD~1',               'undo last commit, leave changes unstaged')
         )
         'Archive & ignore' = @(
@@ -156,7 +157,8 @@ function global:gitaliases {
             @('gitb',                     'git branch',                     'list or manage branches'),
             @('gitc <branch>',            'git checkout',                   'switch branch or restore files'),
             @('gitcb <branch>',           'git checkout -b',                'create and switch to a new branch'),
-            @('gitcd',                    'git checkout develop',           'switch to develop')
+            @('gitcd',                    'git checkout develop',           'switch to develop'),
+            @('gitcf',                    'PSFzf (if installed)',           'fuzzy-pick a branch and check it out')
         )
         'Stash' = @(
             @('gst  stash',               'git stash push',                 'save dirty state onto the stash'),
@@ -165,7 +167,7 @@ function global:gitaliases {
         )
         'Cherry-pick & clean' = @(
             @('gitcp <commit>',           'git cherry-pick',                'apply a commit onto the current branch'),
-            @('gclean',                   'git clean -fd',                  'delete untracked files and directories')
+            @('gclean',                   'git clean -fd',                  'delete untracked files and directories (confirms first)')
         )
         'Fetch & pull' = @(
             @('gitf',                     'git fetch',                      'download changes from remote'),
@@ -174,7 +176,7 @@ function global:gitaliases {
             @('updated',                  'git fetch + rebase',             'sync with origin/develop')
         )
         'Push' = @(
-            @('gpf  gitfp  gitpf',        'git push --force',               'force-push'),
+            @('gpf  gitfp  gitpf',        'git push --force',               'force-push (confirms first)'),
             @('gp1',                      'git push --set-upstream',        'push and set upstream tracking'),
             @('pushdr <branch>',          'git push -u origin local:remote','push to a differently-named remote branch'),
             @('pushdr-f <branch>',        'git push -uf origin local:remote','force-push to a differently-named remote branch')
@@ -207,6 +209,7 @@ function global:gitaliases {
         'Worktree' = @(
             @('wt-list',                  'git worktree list',              'list all worktrees'),
             @('wt-go <name>',             'Set-Location',                   'cd to a worktree by name fragment'),
+            @('wt-gof',                   'PSFzf (if installed)',           'fuzzy-pick a worktree and cd to it'),
             @('wt-feature <id> <desc>',   'git worktree add -b feature/...','create a feature branch worktree'),
             @('wt-fix <id> <desc>',       'git worktree add -b fix/...',    'create a fix branch worktree'),
             @('wt-c <branch>',            'git worktree add',               'checkout an existing branch as a worktree'),
@@ -247,6 +250,84 @@ function global:gitaliases {
 function global:allaliases {
     aliases
     gitaliases
+}
+Set-Alias -Name cheat -Value allaliases
+
+<#
+doctor reports which optional, tool-gated integrations are active right
+now. Several things in this config (colorized man-page-equivalent view,
+fzf pickers, zoxide, direnv, desktop notifications) are inert until their
+underlying tool is installed.
+#>
+# Diagnostics
+function global:doctor {
+    $checks = @(
+        @('bat',       'non-markdown files in view'),
+        @('glow',      'rendered markdown in view'),
+        @('PSFzf',     'Ctrl+T/Ctrl+R, wt-gof, gitcf', $true),
+        @('zoxide',    'z <partial-name>'),
+        @('direnv',    'per-project .envrc auto-loading'),
+        @('BurntToast','desktop notification for long-running commands', $true)
+    )
+    Write-Host ""
+    Write-Host "  Optional integrations" -ForegroundColor Cyan
+    Write-Host "  ----------------------" -ForegroundColor DarkGray
+    foreach ($c in $checks) {
+        $name = $c[0]; $label = $c[1]; $isModule = $c.Count -gt 2 -and $c[2]
+        $found = if ($isModule) { [bool](Get-Module -ListAvailable -Name $name) }
+                 else { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
+        if ($found) {
+            Write-Host "  ✓ $name  " -ForegroundColor Green -NoNewline
+            Write-Host $label -ForegroundColor DarkGray
+        } else {
+            Write-Host "  ✗ $name  " -ForegroundColor Red -NoNewline
+            Write-Host "$label — not installed" -ForegroundColor DarkGray
+        }
+    }
+    Write-Host ""
+}
+
+<#
+view is a read-only file viewer. Markdown renders properly (headers, bold,
+tables) via glow; everything else is syntax-highlighted via bat; falls
+back to Get-Content if neither is installed.
+#>
+# Viewer
+function global:view {
+    param([Parameter(Mandatory, ValueFromRemainingArguments)][string[]]$Paths)
+    foreach ($p in $Paths) {
+        if ((Get-Command glow -ErrorAction SilentlyContinue) -and ($p -match '\.md$|\.markdown$')) {
+            glow -p -s pink $p
+        } elseif (Get-Command bat -ErrorAction SilentlyContinue) {
+            bat --paging=always $p
+        } else {
+            Get-Content $p | Out-Host -Paging
+        }
+    }
+}
+
+<#
+repos-status scans a directory of repos and reports which need attention
+(uncommitted changes and/or commits not yet pushed to their upstream).
+#>
+# Workspace
+function global:repos-status {
+    param([string]$Root = 'C:\repos')
+    $any = $false
+    Get-ChildItem $Root -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        $dir = $_.FullName
+        if (-not (git -C $dir rev-parse --is-inside-work-tree 2>$null)) { return }
+        $dirty = git -C $dir status --porcelain 2>$null
+        $ahead = git -C $dir rev-list --count '@{upstream}..HEAD' 2>$null
+        $parts = @()
+        if ($dirty) { $parts += "$((@($dirty)).Count) uncommitted" }
+        if ($ahead -and [int]$ahead -gt 0) { $parts += "$ahead unpushed" }
+        if ($parts.Count -gt 0) {
+            $any = $true
+            Write-Host "  $($_.Name): $($parts -join ', ')"
+        }
+    }
+    if (-not $any) { Write-Host "All repos under $Root are clean and pushed." -ForegroundColor Green }
 }
 
 # Find-and-replace across all files under a path (mirrors fr)
