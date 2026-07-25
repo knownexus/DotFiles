@@ -1,0 +1,11 @@
+# -*- sh -*-
+#
+# One-line reminder of how to recall what's set up in this config, shown
+# once per shell session (not repeated on `sb` reloads).
+
+alias cheat='allaliases'
+
+if [[ -z "$_ZSH_WELCOME_SHOWN" ]]; then
+    export _ZSH_WELCOME_SHOWN=1
+    echo "Tip: run 'cheat' (or 'aliases' / 'gitaliases') to see everything set up in this shell."
+fi
