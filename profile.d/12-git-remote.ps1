@@ -4,10 +4,17 @@
 function global:gitf  { git fetch @args }
 function global:gitpl { git pull --rebase @args }
 
-# Push (force)
-function global:gpf   { git push --force @args }
-function global:gitfp { git push --force @args }
-function global:gitpf { git push --force @args }
+# Push (force) — confirms and shows the upstream that would be overwritten
+function script:Confirm-ForcePush {
+    $upstream = git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>$null
+    if (-not $upstream) { $upstream = '<no upstream configured>' }
+    Write-Host "This will force-push and overwrite history on: $upstream" -ForegroundColor Yellow
+    $ans = Read-Host "Proceed with git push --force $($args -join ' ')? (y/n)"
+    if ($ans -eq 'y') { git push --force @args }
+}
+function global:gpf   { Confirm-ForcePush @args }
+function global:gitfp { Confirm-ForcePush @args }
+function global:gitpf { Confirm-ForcePush @args }
 
 # Push current branch upstream
 function global:gp1 {

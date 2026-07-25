@@ -151,8 +151,18 @@ function global:gits  { git show @args }
 function global:gitsn { git show --name-only @args }
 function global:gsl   { git show --color=always @args | less -R }
 
-# Reset
-function global:grh { git reset --hard @args }
+# Reset — confirms before discarding uncommitted changes
+function global:grh {
+    if (-not (Assert-GitRepo)) { return }
+    $dirty = git status --short
+    if ($dirty) {
+        Write-Host "This will discard the following uncommitted changes:" -ForegroundColor Yellow
+        Write-Host $dirty
+    }
+    $target = if ($args.Count -gt 0) { $args[0] } else { 'HEAD' }
+    $ans = Read-Host "Proceed with git reset --hard $target? (y/n)"
+    if ($ans -eq 'y') { git reset --hard @args }
+}
 function global:gup { git reset HEAD~1 }
 
 # Local-only ignore via .git/info/exclude (never committed)
