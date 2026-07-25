@@ -387,6 +387,7 @@ precmd () {
 	psvar[4]="${_VCS_PROMPT_LEAF}"
     }
     psvar[5]="${_SUDO_COLOUR}"
+    _notify_precmd
 }
 
 _VCS_PROMPT="${_VCS_COLOUR}(%1v)${_VCS_RESET}"
@@ -402,7 +403,7 @@ else
 fi
 
 # Prompt as machine%                                           /path/on/right
-PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}${_SHELLDEPTH}$ "
+PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}${_SHELLDEPTH}%(1j.[%j] .)$ "
 RPS1="%(1V.${_VCS_RPROMPT}.%(4~|.../%3~|%~))"
 
 if [ "x$debian_chroot" = "x" -a -e /etc/debian_chroot ]; then
@@ -410,6 +411,6 @@ if [ "x$debian_chroot" = "x" -a -e /etc/debian_chroot ]; then
 fi
 
 if [ "x$debian_chroot" != "x" ]; then
-  PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}/$debian_chroot${_SHELLDEPTH}%(1V.${_VCS_PROMPT}.)%# "
+  PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}/$debian_chroot${_SHELLDEPTH}%(1j.[%j] .)%(1V.${_VCS_PROMPT}.)%# "
 fi
 

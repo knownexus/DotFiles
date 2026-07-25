@@ -36,4 +36,5 @@ entitled ()
 preexec ()
 {
     settitle "zsh running: $2"
+    _notify_preexec "$2"
 }
