@@ -29,6 +29,12 @@ autoload -Uz compinit
 compinit -u
 # End of lines added by compinstall
 
+# Cache completion results (branch lists, docker/git subcommands, etc.) —
+# noticeably speeds up completion generators that shell out.
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path "${HOME}/.zsh_cache"
+mkdir -p "${HOME}/.zsh_cache"
+
 # ---------------------------------------------------------------------------
 # Worktree completions for wt-go, wt-done, wt-done-f
 # Completes the last path segment of each worktree
