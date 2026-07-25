@@ -374,6 +374,12 @@ sudo_precmd () {
 # And put it all together
 
 precmd () {
+    # Captured before anything else runs — precmd's own commands below
+    # (_find_svn/_find_bzr/_find_git etc.) would otherwise overwrite $? long
+    # before %(?..) ever gets evaluated at prompt-render time, silently
+    # breaking the exit-code indicator in PS1 no matter what the user's last
+    # command actually returned.
+    local _last_status=$?
     local ok
     ok=1
     _find_svn ||
@@ -393,6 +399,7 @@ precmd () {
 	psvar[4]="${_VCS_PROMPT_LEAF}"
     }
     psvar[5]="${_SUDO_COLOUR}"
+    (( _last_status != 0 )) && psvar[6]=1
     _notify_precmd
 }
 
@@ -409,7 +416,7 @@ else
 fi
 
 # Prompt as machine%                                           /path/on/right
-PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}${_SHELLDEPTH}%(1j.[%j] .)%(?..%F{red}✗%f )$ "
+PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}${_SHELLDEPTH}%(1j.[%j] .)%(6V.%F{red}✗%f .)$ "
 RPS1="%(1V.${_VCS_RPROMPT}.%(4~|.../%3~|%~))"
 
 if [ "x$debian_chroot" = "x" -a -e /etc/debian_chroot ]; then
@@ -417,6 +424,6 @@ if [ "x$debian_chroot" = "x" -a -e /etc/debian_chroot ]; then
 fi
 
 if [ "x$debian_chroot" != "x" ]; then
-  PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}/$debian_chroot${_SHELLDEPTH}%(1j.[%j] .)%(?..%F{red}✗%f )%(1V.${_VCS_PROMPT}.)%# "
+  PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}/$debian_chroot${_SHELLDEPTH}%(1j.[%j] .)%(6V.%F{red}✗%f .)%(1V.${_VCS_PROMPT}.)%# "
 fi
 
