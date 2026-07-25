@@ -403,7 +403,7 @@ fi
 
 # Prompt as machine%                                           /path/on/right
 PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}${_SHELLDEPTH}$ "
-RPS1="%(1V.${_VCS_RPROMPT}.%~)"
+RPS1="%(1V.${_VCS_RPROMPT}.%(4~|.../%3~|%~))"
 
 if [ "x$debian_chroot" = "x" -a -e /etc/debian_chroot ]; then
   debian_chroot=$(cat /etc/debian_chroot)
