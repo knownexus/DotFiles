@@ -1085,9 +1085,9 @@ grev-scan() {
 # ---------------------------------------------------------------------------
 fix-fetch-refspecs() {
     local root="${1:-$HOME/repos}"
+    local dir fetch
     for dir in "$root"/*/; do
         [[ -d "$dir/.git" ]] || continue
-        local fetch
         fetch=$(git -C "$dir" config --get-all remote.origin.fetch 2>/dev/null || true)
         if [[ -z "$fetch" ]]; then
             echo "Fixing: $(basename "$dir")"
@@ -1095,4 +1095,37 @@ fix-fetch-refspecs() {
             git -C "$dir" remote update
         fi
     done
+}
+
+# ---------------------------------------------------------------------------
+# repos-status — scan a directory of repos and report which need attention
+# (uncommitted changes and/or commits not yet pushed to their upstream)
+# ---------------------------------------------------------------------------
+repos-status() {
+    local root="${1:-$HOME/repos}"
+    local esc=$'\033' reset yellow red green gray
+    reset="${esc}[0m"; yellow="${esc}[33m"; red="${esc}[31m"; green="${esc}[32m"; gray="${esc}[90m"
+
+    local dir name dirty dirty_count ahead any_attention=0
+    local -a parts
+    for dir in "$root"/*/; do
+        git -C "$dir" rev-parse --is-inside-work-tree &>/dev/null || continue
+        name=$(basename "$dir")
+        dirty=$(git -C "$dir" status --porcelain 2>/dev/null)
+        dirty_count=0
+        [[ -n "$dirty" ]] && dirty_count=$(wc -l <<< "$dirty")
+        ahead=$(git -C "$dir" rev-list --count '@{upstream}..HEAD' 2>/dev/null)
+        [[ -z "$ahead" ]] && ahead=0
+
+        parts=()
+        (( dirty_count > 0 )) && parts+=("${red}${dirty_count} uncommitted${reset}")
+        (( ahead > 0 )) && parts+=("${yellow}${ahead} unpushed${reset}")
+
+        if (( ${#parts[@]} > 0 )); then
+            any_attention=1
+            echo "  ${name}: ${(j:, :)parts}"
+        fi
+    done
+
+    (( any_attention )) || echo "${green}All repos under $root are clean and pushed.${reset}"
 }
