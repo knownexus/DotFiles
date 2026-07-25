@@ -8,6 +8,13 @@ compreload ()
    autoload _$ARG
 }
 
+# Required for the `menu select` zstyle below to do anything at all — it
+# provides the menu-select widget and the menuselect keymap that Tab/arrow
+# keys navigate once the completion menu is showing. Without this, `menu
+# select` is silently inert: candidates list on the first Tab same as
+# always, but a second Tab and the arrow keys do nothing.
+zmodload zsh/complist
+
 # The following lines were added by compinstall
 
 zstyle ':completion:*' auto-description 'specify: %d'
