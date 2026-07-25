@@ -563,14 +563,18 @@ wt-prune() { git worktree prune -v; }
 # Set up a multi-worktree workspace
 # Usage: wt-setup <branch,...> [repo-name] [clone-url] [parent-path]
 wt-setup() {
-    local branches_str="" name="" clone_url="" path="$(pwd)"
+    # NOTE: never name a local var "path" — it's a special zsh parameter
+    # tied to $PATH; shadowing it with a scalar empties PATH for the rest
+    # of this function's scope and silently breaks every external command
+    # (git included). Found the hard way — see wt-setup's own bug history.
+    local branches_str="" name="" clone_url="" base_path="$(pwd)"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -b|-branches|--branches) shift; branches_str="$1" ;;
             -n|-name|--name)         shift; name="$1" ;;
             -u|-url|--url)           shift; clone_url="$1" ;;
-            -p|-path|--path)         shift; path="$1" ;;
+            -p|-path|--path)         shift; base_path="$1" ;;
             *) echo "Unknown argument: $1" >&2; return 1 ;;
         esac
         shift
@@ -582,17 +586,17 @@ wt-setup() {
     fi
 
     local -a branches
-    IFS=',' read -ra branches <<< "$branches_str"
+    branches=("${(s:,:)branches_str}")
 
     local git_root workspace_dir
     if [[ -n "$clone_url" ]]; then
         local repo_name="${clone_url##*/}"; repo_name="${repo_name%.git}"
         [[ -z "$name" ]] && name="$repo_name"
-        local clone_target="$path/$name/.git-main"
+        local clone_target="$base_path/$name/.git-main"
 
         # If workspace already has content (e.g. a previous full clone), move it into a
         # named subdirectory so it becomes part of the worktree layout rather than noise.
-        local potential_workspace_dir="$path/$name"
+        local potential_workspace_dir="$base_path/$name"
         if [[ -d "$potential_workspace_dir" ]]; then
             local has_other_content
             has_other_content=$(find "$potential_workspace_dir" -mindepth 1 -maxdepth 1 ! -name '.git-main' 2>/dev/null)
@@ -614,7 +618,7 @@ wt-setup() {
         git -C "$clone_target" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
         git -C "$clone_target" fetch --all --quiet
         git_root="$clone_target"
-        workspace_dir="$path/$name"
+        workspace_dir="$base_path/$name"
     else
         git_root=$(git rev-parse --show-toplevel 2>/dev/null)
         if [[ -z "$git_root" ]]; then
@@ -645,8 +649,11 @@ wt-setup() {
 # Workspace — clone multiple repos each with their own worktrees
 # Usage: wt-workspace <path> <repo-url,...> <branch,...>
 wt-workspace() {
-    local path="$1" repos="$2" branches="$3"
-    "$HOME/.resources/zsh/scripts/new-git-workspace.sh" -p "$path" -r "$repos" -b "$branches"
+    # NOTE: never name a local var "path" — it's a special zsh parameter
+    # tied to $PATH; shadowing it empties PATH for this scope and breaks
+    # every external command (see wt-setup's bug history above).
+    local workspace_path="$1" repos="$2" branches="$3"
+    "$HOME/.resources/zsh/scripts/new-git-workspace.sh" -p "$workspace_path" -r "$repos" -b "$branches"
 }
 
 # ---------------------------------------------------------------------------
