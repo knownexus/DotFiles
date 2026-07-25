@@ -144,6 +144,7 @@ _SIGHINT_ALL_COMMANDS=(
 
 _sighint_update() {
     POSTDISPLAY=""
+    [[ "$KEYMAP" == "isearch" ]] && return   # don't hint over an incremental search
     [[ -z "$BUFFER" ]] && return
 
     local -a parts
