@@ -470,8 +470,12 @@ updated() {
 # .bare) if we're sitting at a workspace root instead — not yet inside any
 # specific worktree, which is the natural place to run wt-go/wt! from.
 _wt_gitdir() {
-    if git rev-parse --git-dir &>/dev/null; then
-        git rev-parse --git-dir
+    # --git-common-dir (not --git-dir) so this always resolves to the
+    # shared bare repo even when invoked from inside a specific linked
+    # worktree — needed so wt-repair can correctly derive the workspace
+    # root as the parent of this path.
+    if git rev-parse --git-common-dir &>/dev/null; then
+        git rev-parse --git-common-dir
     elif [[ -d .git-main ]]; then
         echo ".git-main"
     elif [[ -d .bare ]]; then
@@ -497,15 +501,23 @@ _wt_project_root() {
 
 # Returns all worktree paths, excluding the bare storage dir itself
 # (.git-main / .bare) — that's never something to wt-go/wt-done into.
-_wt_paths() {
-    local gitdir
-    gitdir=$(_wt_gitdir) || return 1
+# Same as _wt_paths but for an explicitly-given git-dir, so callers that
+# need to operate on OTHER repos (not just cwd) — like wt-repair --all —
+# don't have to cd into each one first.
+_wt_paths_for() {
+    local gitdir="$1"
     git --git-dir="$gitdir" worktree list --porcelain | awk '
         /^worktree / { path = $0; sub(/^worktree /, "", path); is_bare = 0; next }
         /^bare$/     { is_bare = 1; next }
         /^$/         { if (path != "" && !is_bare) print path; path = ""; next }
         END          { if (path != "" && !is_bare) print path }
     '
+}
+
+_wt_paths() {
+    local gitdir
+    gitdir=$(_wt_gitdir) || return 1
+    _wt_paths_for "$gitdir"
 }
 
 # Navigate to a worktree by partial path name
@@ -598,6 +610,82 @@ wt-prune() {
     local gitdir
     gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
     git --git-dir="$gitdir" worktree prune -v
+}
+
+# Repair stale worktree links — the fix for exactly the "prunable gitdir
+# file points to non-existent location" situation that comes from copying
+# or syncing a wt-setup/wt-workspace repo to a different machine or path
+# (e.g. Windows -> Linux, or just a different directory). With no args,
+# repairs the workspace at the current directory. With --all, scans a
+# directory of repos (default ~/repos) for any wt-setup/wt-workspace
+# workspaces with stale links and repairs all of them.
+# Worktree admin dir names under a bare git-dir (i.e. the subdirectory
+# names of <gitdir>/worktrees/). For wt-setup/wt-workspace's flat layout
+# (worktrees created as direct children of the workspace root), these
+# match the actual worktree directory names — which is what lets
+# _wt_repair_one derive the CORRECT current path itself rather than
+# trusting git's own report, which for a stale entry is exactly the
+# broken path being repaired. Doesn't handle wt-feature/wt-fix's nested
+# feature/<x>, fix/<x> layout — git's internal admin name for those is
+# just the leaf component, not the nested path.
+_wt_admin_names() {
+    local gitdir="$1" d
+    for d in "$gitdir"/worktrees/*(N/); do
+        basename "$d"
+    done
+}
+
+# Repairs one workspace given its bare git-dir.
+_wt_repair_one() {
+    local gitdir="$1"
+    local workspace_root
+    workspace_root=$(cd "$(dirname "$gitdir")" && pwd)
+    local -a names paths
+    names=("${(@f)$(_wt_admin_names "$gitdir")}")
+    if (( ${#names[@]} == 0 )); then
+        echo "No worktrees found to repair."
+        return 0
+    fi
+    local n
+    for n in "${names[@]}"; do
+        paths+=("$workspace_root/$n")
+    done
+    git --git-dir="$gitdir" worktree repair "${paths[@]}"
+    echo "Repaired ${#paths[@]} worktree link(s) in $workspace_root."
+}
+
+# Repair stale worktree links — the fix for exactly the "prunable gitdir
+# file points to non-existent location" situation that comes from copying
+# or syncing a wt-setup/wt-workspace repo to a different machine or path
+# (e.g. Windows -> Linux, or just a different directory). With no args,
+# repairs the workspace at the current directory. With --all, scans a
+# directory of repos (default ~/repos) for any wt-setup/wt-workspace
+# workspaces with stale links and repairs all of them.
+wt-repair() {
+    if [[ "$1" == "--all" ]]; then
+        local root="${2:-$HOME/repos}"
+        local dir bare_name gitdir stale any=0
+        for dir in "$root"/*/; do
+            dir="${dir%/}"
+            if [[ -d "$dir/.git-main" ]]; then bare_name=".git-main"
+            elif [[ -d "$dir/.bare" ]]; then bare_name=".bare"
+            else continue
+            fi
+            gitdir="$dir/$bare_name"
+            stale=$(git --git-dir="$gitdir" worktree list --porcelain 2>/dev/null | grep -c '^prunable')
+            if (( stale > 0 )); then
+                any=1
+                echo "Repairing $(basename "$dir") ($stale stale link(s))..."
+                _wt_repair_one "$gitdir"
+            fi
+        done
+        (( any )) || echo "No stale worktree links found under $root."
+        return 0
+    fi
+
+    local gitdir
+    gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
+    _wt_repair_one "$gitdir"
 }
 
 # Set up a multi-worktree workspace

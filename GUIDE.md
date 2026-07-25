@@ -99,6 +99,18 @@ knowing about explicitly.
 | `wt-workspace <path> <urls> <branches>` | Same, across multiple repos |
 | `wt-gof` *(fzf)* | Fuzzy-pick a worktree and `cd` to it |
 | `gitcf` *(fzf)* | Fuzzy-pick a branch and check it out |
+| `wt-repair [--all [root]]` | Fix stale worktree links — see below |
+
+> **`wt-repair`** fixes the "`prunable gitdir file points to non-existent
+> location`" situation that comes from copying/syncing a `wt-setup`/
+> `wt-workspace` workspace to a different machine or path (e.g.
+> Windows → Linux — this is exactly how it was first found: a workspace
+> created via pwsh's `wt-setup` on Windows, then copied over, left every
+> worktree pointing at the old `C:\...` paths). With no args, repairs the
+> workspace at the current directory; `--all [root]` scans a directory of
+> repos (default `~/repos`) for any workspaces with stale links and
+> repairs all of them. Only rewrites the internal `.git`/`gitdir` pointer
+> files — no commits or working-tree files are touched.
 
 There are ~90 git aliases in total — run `gitaliases` for the full list.
 

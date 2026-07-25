@@ -274,6 +274,7 @@ gitaliases() {
         "wt-done-f <name>"$'\x1f'"worktree remove -f + branch -D"$'\x1f'"force-remove a worktree and delete its branch"
         "wt!"$'\x1f'"git status (all worktrees)"$'\x1f'"show status across every worktree"
         "wt-prune"$'\x1f'"git worktree prune"$'\x1f'"clean up stale worktree references"
+        "wt-repair [--all [root]]"$'\x1f'"git worktree repair"$'\x1f'"fix stale worktree links after copying/syncing a workspace"
         "wt-setup <branches>"$'\x1f'"(custom)"$'\x1f'"single-repo bare clone with branch worktrees"
         "wt-workspace <path> <repos> <branches>"$'\x1f'"(custom script)"$'\x1f'"multi-repo workspace with per-repo worktrees"
         "fix-fetch-refspecs [root]"$'\x1f'"config + remote update"$'\x1f'"repair missing fetch refspecs across repos"
