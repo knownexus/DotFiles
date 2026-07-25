@@ -124,7 +124,7 @@ trash-empty() {
     printf "Permanently delete %d item(s) from %s? (y/n) " "$count" "$_TRASH_DIR"
     read -r ans
     if [[ "$ans" == "y" ]]; then
-        command rm -rf -- "${_TRASH_DIR:?}"/*(N)
+        command rm -rf -- "${_TRASH_DIR:?}"/*(DN)
         echo "Trash emptied."
     else
         echo "Aborted."
