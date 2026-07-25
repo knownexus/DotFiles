@@ -102,7 +102,7 @@ aliases() {
         "ls [path]"$'\x1f'"(custom)"$'\x1f'"two-column grid with mode/date/size, colored by file type"
         "l [path]"$'\x1f'"(custom)"$'\x1f'"plain wide name-only listing, colored by file type"
         "ll [path]"$'\x1f'"(custom)"$'\x1f'"one-per-line long listing + dir/file count summary"
-        "la [path]"$'\x1f'"(custom)"$'\x1f'"like l, including dotfiles"
+        "la [path]"$'\x1f'"(custom)"$'\x1f'"like ls, including dotfiles"
         "lla [path]"$'\x1f'"(custom)"$'\x1f'"like ll, including dotfiles"
         "md"$'\x1f'"mkdir"$'\x1f'"make a directory"
         "mcd <dir>"$'\x1f'"mkdir -p && cd"$'\x1f'"create a directory and cd into it in one step"

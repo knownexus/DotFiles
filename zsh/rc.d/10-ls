@@ -198,5 +198,5 @@ unalias ls l ll la lla 2>/dev/null
 ls()  { [[ "$1" == -* ]] && { command ls --color=auto "$@"; return }; _ls_grid_list ${(f)"$(_ls_collect 0 "${1:-.}")"} }
 l()   { [[ "$1" == -* ]] && { command ls -CF --color=auto "$@"; return }; _ls_wide_list ${(f)"$(_ls_collect 0 "${1:-.}")"} }
 ll()  { [[ "$1" == -* ]] && { command ls -l --color=auto "$@"; return }; _ls_long_list ${(f)"$(_ls_collect 0 "${1:-.}")"} }
-la()  { [[ "$1" == -* ]] && { command ls -a --color=auto "$@"; return }; _ls_wide_list ${(f)"$(_ls_collect 1 "${1:-.}")"} }
+la()  { [[ "$1" == -* ]] && { command ls -a --color=auto "$@"; return }; _ls_grid_list ${(f)"$(_ls_collect 1 "${1:-.}")"} }
 lla() { [[ "$1" == -* ]] && { command ls -la --color=auto "$@"; return }; _ls_long_list ${(f)"$(_ls_collect 1 "${1:-.}")"} }

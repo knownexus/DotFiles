@@ -18,10 +18,11 @@ nicer job than plain `ls` + dircolors.
 
 | Command | Layout |
 |---|---|
-| `ls [path]` | Two-column grid, mode/date/size + name per entry |
+| `ls [path]` | Colored, name-only 3-column grid (top-to-bottom fill) |
 | `l [path]` | Plain wide name-only listing |
-| `ll [path]` | One-per-line long listing, header + dir/file count summary |
-| `la` / `lla` | Same as `l` / `ll`, including dotfiles |
+| `ll [path]` | One-per-line long listing, mode/date/size + dir/file count summary |
+| `la [path]` | Same as `ls`, including dotfiles |
+| `lla [path]` | Same as `ll`, including dotfiles |
 
 All colored by type: directories blue, executables green, archives
 yellow, images cyan, hidden entries gray.
