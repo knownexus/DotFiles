@@ -99,11 +99,11 @@ _print_alias_cheatsheet() {
 aliases() {
     local -a e=(
         "SECTION"$'\x1f'"File system"
-        "l"$'\x1f'"ls -CF"$'\x1f'"quick columnar listing with type indicators"
-        "ll"$'\x1f'"ls -l"$'\x1f'"long listing"
-        "la"$'\x1f'"ls -a"$'\x1f'"include dotfiles"
-        "lla"$'\x1f'"ls -al"$'\x1f'"long listing including dotfiles"
-        "ls"$'\x1f'"ls --color=auto"$'\x1f'"colorized (plain ls if dircolors isn't installed)"
+        "ls [path]"$'\x1f'"(custom)"$'\x1f'"two-column grid with mode/date/size, colored by file type"
+        "l [path]"$'\x1f'"(custom)"$'\x1f'"plain wide name-only listing, colored by file type"
+        "ll [path]"$'\x1f'"(custom)"$'\x1f'"one-per-line long listing + dir/file count summary"
+        "la [path]"$'\x1f'"(custom)"$'\x1f'"like l, including dotfiles"
+        "lla [path]"$'\x1f'"(custom)"$'\x1f'"like ll, including dotfiles"
         "md"$'\x1f'"mkdir"$'\x1f'"make a directory"
         "mcd <dir>"$'\x1f'"mkdir -p && cd"$'\x1f'"create a directory and cd into it in one step"
         "tre"$'\x1f'"tree -I ..."$'\x1f'"directory tree, excluding build/vcs noise dirs"

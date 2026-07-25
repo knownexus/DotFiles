@@ -2,22 +2,197 @@
 
 # Configure ls as I like it.
 
-alias l='ls -CF'
-alias ll='ls -l'
-alias la='ls -a'
-alias lla='la -l'
-
-# Look for colours...
+# Look for colours (LS_COLORS is also used by the completion menu in
+# 50-completions, so this stays regardless of the custom renderer below).
 
 DCFILE=$RESDIR/settings/ls/dircolors
 DCEXEC=$(which dircolors)
 
 if [ "x$DCEXEC" = "x" ]; then
  # No dircolors
- alias ls=$(which ls)
+ :
 else
- alias ls='ls --color=auto'
  eval $($DCEXEC $DCFILE)
 fi
 
 unset DCEXEC DCFILE
+
+# ---------------------------------------------------------------------------
+# Custom ls rendering — mirrors the pwsh side's 10-ls.ps1 layout: colored by
+# file type, a two-column grid with mode/date/size for the bare `ls`, a
+# plain wide name-only view for `l`, and a full one-per-line long view with
+# a header and a dir/file count summary for `ll`. la/lla are the same with
+# hidden files included.
+# ---------------------------------------------------------------------------
+
+zmodload zsh/datetime 2>/dev/null
+
+typeset -g _LS_RESET=$'\033[0m'
+typeset -g _LS_BOLD=$'\033[1m'
+typeset -g _LS_BLUE=$'\033[1;34m'    # directories
+typeset -g _LS_GREEN=$'\033[32m'     # executables/scripts
+typeset -g _LS_YELLOW=$'\033[33m'    # archives
+typeset -g _LS_CYAN=$'\033[36m'      # images
+typeset -g _LS_GRAY=$'\033[90m'      # hidden items / chrome
+
+_ls_human_size() {
+    local bytes=$1
+    if (( bytes >= 1099511627776 )); then printf '%6.1fT' $(( bytes / 1099511627776. ))
+    elif (( bytes >= 1073741824 )); then printf '%6.1fG' $(( bytes / 1073741824. ))
+    elif (( bytes >= 1048576 )); then printf '%6.1fM' $(( bytes / 1048576. ))
+    elif (( bytes >= 1024 )); then printf '%6.1fK' $(( bytes / 1024. ))
+    else printf '%6dB' "$bytes"
+    fi
+}
+
+_ls_entry_color() {
+    local path="$1" name="${1:t}"
+    if [[ "$name" == .* ]]; then echo "$_LS_GRAY"; return; fi
+    if [[ -d "$path" ]]; then echo "$_LS_BLUE"; return; fi
+    case "${name:e}" in
+        exe|cmd|bat|ps1|sh|msi) echo "$_LS_GREEN" ;;
+        zip|tar|gz|7z|rar|bz2|xz) echo "$_LS_YELLOW" ;;
+        png|jpg|jpeg|gif|bmp|svg|ico|webp) echo "$_LS_CYAN" ;;
+        *) echo "$_LS_RESET" ;;
+    esac
+}
+
+# Single stat call per entry: mode|epoch-mtime|size
+_ls_stat_line() {
+    stat --format '%A|%Y|%s' "$1" 2>/dev/null
+}
+
+_ls_wide_list() {
+    local -a items=("$@")
+    (( ${#items[@]} == 0 )) && return
+    local width=${COLUMNS:-80}
+    (( width < 1 )) && width=80   # COLUMNS can be literally "0" outside a real tty
+    local -a names
+    local it
+    for it in "${items[@]}"; do
+        if [[ -d "$it" ]]; then names+=("${it:t}/"); else names+=("${it:t}"); fi
+    done
+    local colw=0 n
+    for n in "${names[@]}"; do (( ${#n} > colw )) && colw=${#n}; done
+    (( colw += 2 ))
+    local cols=$(( width / colw )); (( cols < 1 )) && cols=1
+    local i=0 color
+    for it in "${items[@]}"; do
+        color=$(_ls_entry_color "$it")
+        printf "%s%-*s%s" "$color" "$colw" "${names[i+1]}" "$_LS_RESET"
+        (( i++ ))
+        (( i % cols == 0 )) && echo
+    done
+    (( i % cols != 0 )) && echo
+}
+
+_ls_long_list() {
+    local -a items=("$@")
+    (( ${#items[@]} == 0 )) && return
+    printf "%s%s %-7s %-12s %7s  %s%s\n" "$_LS_BOLD" "$_LS_GRAY" "Mode" "Modified" "Size" "Name" "$_LS_RESET"
+    printf "%s %s%s\n" "$_LS_GRAY" "----------------------------------------" "$_LS_RESET"
+    local it stat_line mode epoch size sizestr date name color dc=0 fc=0
+    for it in "${items[@]}"; do
+        color=$(_ls_entry_color "$it")
+        stat_line=$(_ls_stat_line "$it")
+        mode="${stat_line%%|*}"
+        local rest="${stat_line#*|}"
+        epoch="${rest%%|*}"
+        size="${rest#*|}"
+        date=$(strftime '%b %d %H:%M' "$epoch" 2>/dev/null)
+        if [[ -d "$it" ]]; then
+            sizestr="  <dir>"
+            name="${it:t}/"
+            (( dc++ ))
+        else
+            sizestr=$(_ls_human_size "$size")
+            name="${it:t}"
+            (( fc++ ))
+        fi
+        printf "%s %-7s %-12s %7s  %s%s%s%s\n" "$_LS_GRAY" "$mode" "$date" "$sizestr" "$_LS_RESET" "$color" "$name" "$_LS_RESET"
+    done
+    local dirword="dirs" fileword="files"
+    (( dc == 1 )) && dirword="dir"
+    (( fc == 1 )) && fileword="file"
+    printf "%s  %d %s, %d %s%s\n" "$_LS_GRAY" "$dc" "$dirword" "$fc" "$fileword" "$_LS_RESET"
+}
+
+_ls_format_grid_cell() {
+    local it="$1" namew="$2"
+    local color stat_line mode epoch size sizestr date name
+    color=$(_ls_entry_color "$it")
+    stat_line=$(_ls_stat_line "$it")
+    mode="${stat_line%%|*}"
+    local rest="${stat_line#*|}"
+    epoch="${rest%%|*}"
+    size="${rest#*|}"
+    date=$(strftime '%b %d %H:%M' "$epoch" 2>/dev/null)
+    if [[ -d "$it" ]]; then
+        sizestr="  <dir>"
+        name="${it:t}/"
+    else
+        sizestr=$(_ls_human_size "$size")
+        name="${it:t}"
+    fi
+    (( ${#name} > namew )) && name="${name[1,$((namew - 1))]}~"
+    printf "%s %-7s %-12s %7s  %s%s%-*s%s" "$_LS_GRAY" "$mode" "$date" "$sizestr" "$_LS_RESET" "$color" "$namew" "$name" "$_LS_RESET"
+}
+
+_ls_grid_list() {
+    local -a items=("$@")
+    (( ${#items[@]} == 0 )) && return
+    local width=${COLUMNS:-80}
+    (( width < 1 )) && width=80   # COLUMNS can be literally "0" outside a real tty
+    (( width < 40 )) && width=40
+    local colw=$(( width / 2 ))
+    local chromew=31
+    local namew=$(( colw - chromew )); (( namew < 4 )) && namew=4
+    local rows=$(( (${#items[@]} + 1) / 2 ))
+
+    local r ri
+    for (( r=1; r<=rows; r++ )); do
+        _ls_format_grid_cell "${items[r]}" "$namew"
+        ri=$(( r + rows ))
+        if (( ri <= ${#items[@]} )); then
+            _ls_format_grid_cell "${items[ri]}" "$namew"
+        fi
+        echo
+    done
+
+    local dc=0 fc=0 it
+    for it in "${items[@]}"; do
+        if [[ -d "$it" ]]; then (( dc++ )); else (( fc++ )); fi
+    done
+    local dirword="dirs" fileword="files"
+    (( dc == 1 )) && dirword="dir"
+    (( fc == 1 )) && fileword="file"
+    printf "%s  %d %s, %d %s%s\n" "$_LS_GRAY" "$dc" "$dirword" "$fc" "$fileword" "$_LS_RESET"
+}
+
+# Collects sorted directory entries (dirs first, then files, both
+# alphabetical) for the given directory.
+_ls_collect() {
+    local all="$1" dir="${2:-.}"
+    local -a dirs files
+    if [[ "$all" == 1 ]]; then
+        # (D) includes dotfiles in the glob (excluding . and ..) — the
+        # correct zsh idiom; a hand-rolled exclude pattern here silently
+        # matched nothing at all.
+        dirs=("$dir"/*(ND/))
+        files=("$dir"/*(ND.))
+    else
+        dirs=("$dir"/*(N/))
+        files=("$dir"/*(N.))
+    fi
+    print -l -- "${(o)dirs[@]}" "${(o)files[@]}"
+}
+
+# Falling back to real `ls` for actual flag usage (ls -la, ll -h, etc.) —
+# the custom renderers below only take an optional path, matching the
+# pwsh side, and habitual GNU-ls-style flags should still work rather than
+# silently misbehave.
+ls()  { [[ "$1" == -* ]] && { command ls --color=auto "$@"; return }; _ls_grid_list ${(f)"$(_ls_collect 0 "${1:-.}")"} }
+l()   { [[ "$1" == -* ]] && { command ls -CF --color=auto "$@"; return }; _ls_wide_list ${(f)"$(_ls_collect 0 "${1:-.}")"} }
+ll()  { [[ "$1" == -* ]] && { command ls -l --color=auto "$@"; return }; _ls_long_list ${(f)"$(_ls_collect 0 "${1:-.}")"} }
+la()  { [[ "$1" == -* ]] && { command ls -a --color=auto "$@"; return }; _ls_wide_list ${(f)"$(_ls_collect 1 "${1:-.}")"} }
+lla() { [[ "$1" == -* ]] && { command ls -la --color=auto "$@"; return }; _ls_long_list ${(f)"$(_ls_collect 1 "${1:-.}")"} }

@@ -5,11 +5,30 @@ Read this with `view GUIDE.md` (renders properly via `glow`, if installed)
 or `less`. For a live, in-shell version of the alias tables, run `cheat`
 any time.
 
-**Contents:** shell settings · prompt · safety changes · new commands ·
-git additions · key bindings · optional tool integrations · signature
-hints · bugs fixed
+**Contents:** shell settings · `ls` rendering · prompt · safety changes ·
+new commands · git additions · key bindings · optional tool integrations ·
+signature hints · bugs fixed
 
 ---
+
+## `ls` rendering
+
+Ported from the pwsh side's custom renderer, which does a noticeably
+nicer job than plain `ls` + dircolors.
+
+| Command | Layout |
+|---|---|
+| `ls [path]` | Two-column grid, mode/date/size + name per entry |
+| `l [path]` | Plain wide name-only listing |
+| `ll [path]` | One-per-line long listing, header + dir/file count summary |
+| `la` / `lla` | Same as `l` / `ll`, including dotfiles |
+
+All colored by type: directories blue, executables green, archives
+yellow, images cyan, hidden entries gray.
+
+> Only takes an optional path — actual flag usage (`ls -la`, `ll -h`,
+> etc.) falls back to real `ls` rather than trying to parse GNU-style
+> flags itself, so habitual flag usage still works normally.
 
 ## Shell behavior settings
 
