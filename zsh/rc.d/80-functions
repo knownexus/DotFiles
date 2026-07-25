@@ -346,8 +346,14 @@ view() {
         return 1
     fi
     if (( ${+commands[glow]} )) && [[ "$1" == *.md || "$1" == *.markdown ]]; then
+        # glow's "auto" style falls back to a plain, non-rendering "notty"
+        # mode whenever it can't positively confirm a real terminal (piped
+        # output, some terminal emulators, etc.) — headers/bold/tables are
+        # then left as literal #/**/| characters instead of being rendered.
+        # Forcing an explicit style avoids that; override with
+        # `export GLOW_STYLE=light` if your terminal is light-themed.
         local f
-        for f in "$@"; do glow -p "$f"; done
+        for f in "$@"; do glow -p -s "${GLOW_STYLE:-dark}" "$f"; done
     elif (( ${+commands[bat]} )); then
         bat --paging=always "$@"
     else
