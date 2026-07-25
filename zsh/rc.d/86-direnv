@@ -1,0 +1,13 @@
+# -*- sh -*-
+#
+# direnv — per-project environment variables loaded automatically from a
+# .envrc file when you cd into a directory that has one. Inert until
+# direnv is installed (same graceful-degradation pattern as fzf/zoxide/bat
+# elsewhere in this config).
+#
+# Like zoxide, direnv's own hook wires in via add-zsh-hook rather than a
+# second bare precmd(), so it coexists cleanly with the one in 40-prompt.
+
+if (( ${+commands[direnv]} )); then
+    eval "$(direnv hook zsh)"
+fi
