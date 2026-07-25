@@ -266,14 +266,37 @@ alias stashp='git stash pop'
 alias gitf='git fetch'
 alias gitpl='git pull --rebase'
 alias gitcp='git cherry-pick'
-alias gclean='git clean -fd'
+
+# Clean — confirms before permanently deleting untracked files/dirs
+gclean() {
+    local preview
+    preview=$(git clean -fdn "$@")
+    if [[ -z "$preview" ]]; then
+        echo "Nothing to clean."
+        return 0
+    fi
+    echo "This will permanently delete the following untracked files/directories:"
+    echo "$preview"
+    printf "Proceed with git clean -fd %s? (y/n) " "$*"
+    read -r ans
+    [[ "$ans" == "y" ]] && git clean -fd "$@"
+}
 
 # ---------------------------------------------------------------------------
 # Push
 # ---------------------------------------------------------------------------
-alias gpf='git push --force'
-alias gitfp='git push --force'
-alias gitpf='git push --force'
+# Force-push — confirms and shows the upstream that would be overwritten
+_confirm_force_push() {
+    local upstream
+    upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)
+    echo "This will force-push and overwrite history on: ${upstream:-<no upstream configured>}"
+    printf "Proceed with git push --force %s? (y/n) " "$*"
+    read -r ans
+    [[ "$ans" == "y" ]] && git push --force "$@"
+}
+gpf()   { _confirm_force_push "$@"; }
+gitfp() { _confirm_force_push "$@"; }
+gitpf() { _confirm_force_push "$@"; }
 
 gp1() {
     local branch
@@ -302,7 +325,19 @@ pushdr-f() {
 alias gru='git remote update'
 alias grpo='git remote prune origin'
 alias giturl='git config --get remote.origin.url'
-alias grh='git reset --hard'
+
+# Reset --hard — confirms before discarding uncommitted changes
+grh() {
+    local dirty
+    dirty=$(git status --short)
+    if [[ -n "$dirty" ]]; then
+        echo "This will discard the following uncommitted changes:"
+        echo "$dirty"
+    fi
+    printf "Proceed with git reset --hard %s? (y/n) " "${1:-HEAD}"
+    read -r ans
+    [[ "$ans" == "y" ]] && git reset --hard "$@"
+}
 
 # Hard-reset to remote HEAD using fetch + FETCH_HEAD (works without tracking ref)
 gitremote-reset() {
@@ -797,7 +832,7 @@ SCRIPT
     rebase_ok=1
     git rebase -i "${shaA}^" || rebase_ok=0
     export GIT_SEQUENCE_EDITOR="$prev_seq_editor"
-    rm -f "$seq_editor"
+    command rm -f "$seq_editor"   # bypass the trash-aware rm() — this is real temp-file cleanup
 
     if (( ! rebase_ok )); then
         echo "Rebase failed — run 'git rebase --abort' to recover." >&2
