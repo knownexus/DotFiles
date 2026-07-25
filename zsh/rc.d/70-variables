@@ -29,25 +29,3 @@ export REPO_ROOT REPO_SYMBOL
 CLAUDE_MODEL='claude-sonnet-4-6'
 CLAUDE_MODEL_FAST='claude-haiku-4-5-20251001'
 export CLAUDE_MODEL CLAUDE_MODEL_FAST
-
-test "x$EDITOR" = "x" && EDITOR=$VISUAL
-export EDITOR
-
-# ---------------------------------------------------------------------------
-# Repo root alias — displayed in the prompt instead of the full path.
-# Example: REPO_ROOT=$HOME/repos  REPO_SYMBOL='#'
-# Prompt will show:  #/DriveFurtherAPI/develop  instead of  ~/repos/DriveFurtherAPI/develop
-# Set either to empty to disable.
-# ---------------------------------------------------------------------------
-REPO_ROOT="${HOME}/repos"
-REPO_SYMBOL='#'
-export REPO_ROOT REPO_SYMBOL
-
-# ---------------------------------------------------------------------------
-# Claude API model selection (used by scripts that call the Claude API)
-# API key should be set as a shell env var outside of version control:
-#   export ANTHROPIC_API_KEY='sk-ant-...'
-# ---------------------------------------------------------------------------
-CLAUDE_MODEL='claude-sonnet-4-6'
-CLAUDE_MODEL_FAST='claude-haiku-4-5-20251001'
-export CLAUDE_MODEL CLAUDE_MODEL_FAST
