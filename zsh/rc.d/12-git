@@ -41,7 +41,7 @@ gstat() {
     echo "${bold}branch:${reset} ${cyan}${branch}${reset} ${gray}${revno}${reset}${ahead_str}${behind_str}"
     echo ""
 
-    local lines staged unstaged conflicts untracked
+    local lines staged unstaged conflicts untracked l label
     lines=$(git status --porcelain 2>/dev/null)
     staged=$(echo "$lines"    | grep -E '^[AMDRC]'                 || true)
     unstaged=$(echo "$lines"  | grep -E '^.[MD]'                   || true)
@@ -51,7 +51,6 @@ gstat() {
     if [[ -n "$staged" ]]; then
         echo "${bold}${green}Staged:${reset}"
         while IFS= read -r l; do
-            local label
             case "${l:0:1}" in
                 A) label="new file" ;; M) label="modified" ;;
                 D) label="deleted " ;; R) label="renamed " ;;
@@ -65,7 +64,6 @@ gstat() {
     if [[ -n "$unstaged" ]]; then
         echo "${bold}${red}Unstaged:${reset}"
         while IFS= read -r l; do
-            local label
             case "${l:1:1}" in
                 M) label="modified" ;; D) label="deleted " ;; *) label="${l:1:1}" ;;
             esac
