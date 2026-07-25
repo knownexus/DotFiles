@@ -61,7 +61,75 @@ alias md='mkdir'
 alias ng='grep -v'
 alias r='reset'
 alias remspace='sed -i '\''s/[[:space:]]*$//'\'' *'
-alias rmr='rm -r'
+alias cp='cp -i'
+alias mv='mv -i'
+
+# ------------------------------
+# rm — moves to a local trash folder instead of deleting outright.
+# Restore with `trash-restore <name>`, or permanently clear with
+# `trash-empty`. Internal cleanup elsewhere in this config uses
+# `command rm` to bypass this and delete for real.
+# ------------------------------
+_TRASH_DIR="${HOME}/.trash"
+
+rm() {
+    mkdir -p "$_TRASH_DIR"
+    local f base dest had_target=0
+    for f in "$@"; do
+        [[ "$f" == -* ]] && continue
+        had_target=1
+        if [[ ! -e "$f" && ! -L "$f" ]]; then
+            echo "rm: no such file or directory: $f" >&2
+            continue
+        fi
+        base=$(basename "$f")
+        dest="$_TRASH_DIR/$base"
+        [[ -e "$dest" ]] && dest="${dest}.$(date +%s)"
+        command mv -- "$f" "$dest"
+        echo "Trashed: $f  (restore with: trash-restore $(basename "$dest"))"
+    done
+    (( had_target )) || echo "Usage: rm <file> [file ...]" >&2
+}
+rmr() { rm "$@"; }
+
+trash-restore() {
+    if [[ $# -eq 0 ]]; then
+        echo "Usage: trash-restore <name> [name ...]" >&2
+        echo "In trash:" >&2
+        ls -1 "$_TRASH_DIR" 2>/dev/null
+        return 1
+    fi
+    local name
+    for name in "$@"; do
+        if [[ -e "$_TRASH_DIR/$name" ]]; then
+            command mv -- "$_TRASH_DIR/$name" ./
+            echo "Restored: $name"
+        else
+            echo "Not found in trash: $name" >&2
+        fi
+    done
+}
+
+trash-empty() {
+    if [[ ! -d "$_TRASH_DIR" ]]; then
+        echo "Trash is already empty."
+        return 0
+    fi
+    local count
+    count=$(find "$_TRASH_DIR" -mindepth 1 -maxdepth 1 | wc -l)
+    if (( count == 0 )); then
+        echo "Trash is already empty."
+        return 0
+    fi
+    printf "Permanently delete %d item(s) from %s? (y/n) " "$count" "$_TRASH_DIR"
+    read -r ans
+    if [[ "$ans" == "y" ]]; then
+        command rm -rf -- "${_TRASH_DIR:?}"/*(N)
+        echo "Trash emptied."
+    else
+        echo "Aborted."
+    fi
+}
 
 # ------------------------------
 # CD shortcuts
