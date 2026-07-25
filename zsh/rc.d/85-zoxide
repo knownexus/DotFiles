@@ -1,0 +1,14 @@
+# -*- sh -*-
+#
+# zoxide — a smarter cd that learns frequently/recently visited directories,
+# so `z <partial-name>` jumps anywhere without memorizing an rp* alias for
+# it. Inert until zoxide is installed (same graceful-degradation pattern as
+# fzf/bat/dircolors elsewhere in this config).
+#
+# Uses zoxide's own init script, which wires its directory-tracking hook in
+# via add-zsh-hook (appending to $precmd_functions) rather than defining a
+# second bare precmd() — safe to coexist with the one in 40-prompt.
+
+if (( ${+commands[zoxide]} )); then
+    eval "$(zoxide init zsh)"
+fi
