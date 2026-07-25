@@ -153,6 +153,8 @@ aliases() {
         "open <path>"$'\x1f'"xdg-open"$'\x1f'"launch a file/URL with the default app"
         "copy"$'\x1f'"wl-copy/xclip/xsel"$'\x1f'"pipe stdin to the system clipboard (if installed)"
         "cheat  allaliases"$'\x1f'"(custom)"$'\x1f'"show this cheatsheet (aliases + gitaliases)"
+        "zsh-doctor"$'\x1f'"(custom)"$'\x1f'"show which optional integrations (fzf, bat, ...) are active"
+        "view <file>"$'\x1f'"bat (if installed)"$'\x1f'"syntax-highlighted, paged file viewer"
 
         "SECTION"$'\x1f'"Project / workspace"
         "make-project <name> <licence>"$'\x1f'"(custom)"$'\x1f'"git init + add a licence file"
@@ -283,4 +285,62 @@ allaliases() {
     aliases
     gitaliases
 }
+
+# ---------------------------------------------------------------------------
+# zsh-doctor — report which optional, tool-gated integrations are active.
+# Several features in this config (colorized man pages, fzf pickers, zoxide,
+# direnv, desktop notifications, clipboard) are inert until their underlying
+# tool is installed — this is the one place to see, at a glance, which of
+# those are actually live right now.
+# ---------------------------------------------------------------------------
+zsh-doctor() {
+    local esc=$'\033' reset green red gray
+    reset="${esc}[0m"; green="${esc}[32m"; red="${esc}[31m"; gray="${esc}[90m"
+
+    echo ""
+    echo "  Optional integrations"
+    echo "  ----------------------"
+
+    local -a checks=(
+        "dircolors:colorized ls / tab-completion menu"
+        "bat:colorized man pages, view"
+        "fzf:Ctrl+R / Ctrl+T, wt-gof, gitcf"
+        "zoxide:z <partial-name>"
+        "direnv:per-project .envrc auto-loading"
+        "notify-send:desktop notification for long commands"
+        "bzr:bzr repo detection in the prompt"
+        "svn:svn repo detection in the prompt"
+    )
+    local check tool label
+    for check in "${checks[@]}"; do
+        tool="${check%%:*}"
+        label="${check#*:}"
+        if (( ${+commands[$tool]} )); then
+            echo "  ${green}✓${reset} ${tool}  ${gray}${label}${reset}"
+        else
+            echo "  ${red}✗${reset} ${tool}  ${gray}${label} — not installed${reset}"
+        fi
+    done
+
+    echo ""
+    local clip="none found"
+    (( ${+commands[wl-copy]} )) && clip="wl-copy"
+    [[ "$clip" == "none found" ]] && (( ${+commands[xclip]} )) && clip="xclip"
+    [[ "$clip" == "none found" ]] && (( ${+commands[xsel]} )) && clip="xsel"
+    if [[ "$clip" == "none found" ]]; then
+        echo "  ${red}✗${reset} clipboard (copy)  ${gray}none of wl-copy/xclip/xsel found${reset}"
+    else
+        echo "  ${green}✓${reset} clipboard (copy)  ${gray}using ${clip}${reset}"
+    fi
+    echo ""
+}
+
+# view — read-only, syntax-highlighted file viewer via bat (falls back to
+# less if bat isn't installed). Opt-in name so plain `cat` behaviour and
+# any scripts relying on it are untouched.
+if (( ${+commands[bat]} )); then
+    view() { bat --paging=always "$@"; }
+else
+    view() { less "$@"; }
+fi
 
