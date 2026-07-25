@@ -39,8 +39,8 @@ search_grep() {
 unalias g g1 g2 2>/dev/null
 
 g()  { search_grep "$1"; }
-g1() { search_grep "$1" "$EXCLUDE_DIRS"; }
-g2() { search_grep "$1" "$EXCLUDE_DIRS2"; }
+g1() { search_grep "$1" 500 "$EXCLUDE_DIRS"; }
+g2() { search_grep "$1" 500 "$EXCLUDE_DIRS2"; }
 
 # rg-based search (ripgrep) — faster, respects .gitignore automatically
 _SEARCH_EXCLUDE_DIRS=(.git node_modules obj bin logs Migrations dist dist_electron .vs .idea)
