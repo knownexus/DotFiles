@@ -1,37 +1,80 @@
 ﻿# Git worktree — worktree management and multi-repo workspace
 
+<#
+Get-WorktreeGitDir resolves the git-dir to use for worktree operations: the
+current repo's git-dir if already inside one, or a wt-setup/wt-workspace
+bare dir (.git-main or .bare) if sitting at a workspace root instead — not
+yet inside any specific worktree, which is the natural place to run
+wt-go/wt-list/etc from. `git worktree list/add/remove/prune` only work from
+inside an actual working tree or the bare repo itself, so without this,
+every wt-* command below fails with "not a git repository" the moment
+you're at a workspace root rather than already inside one of its worktrees
+— found via a bug report on the zsh side of this config, which had the
+exact same gap (this file was the original source for that port).
+#>
+function global:Get-WorktreeGitDir {
+    $gitDir = git rev-parse --git-dir 2>$null
+    if ($LASTEXITCODE -eq 0 -and $gitDir) { return $gitDir }
+    if (Test-Path '.git-main') { return '.git-main' }
+    if (Test-Path '.bare')     { return '.bare' }
+    return $null
+}
+
 # Returns the project root from any worktree within that project.
 # Supports two layouts:
 #   Standard repo — main worktree has a .git directory -> main worktree IS the root
 #   Bare-ish repo — main worktree has a .git file / no .git -> parent of main worktree is the root
 function global:Get-GitWorktreeRoot {
-    $main = git worktree list --porcelain |
+    $gitDir = Get-WorktreeGitDir
+    if (-not $gitDir) { return $null }
+    $main = git --git-dir=$gitDir worktree list --porcelain |
         Where-Object { $_ -match '^worktree ' } |
         Select-Object -First 1 |
         ForEach-Object { $_ -replace '^worktree ', '' }
+    if (-not $main) { return (Get-Location).Path }
     if (Test-Path (Join-Path $main '.git') -PathType Container) {
         return $main
     }
     return Split-Path $main -Parent
 }
 
-# Returns all worktree paths for the current repo
+# Returns all worktree paths for the current repo, excluding the bare
+# storage dir itself (.git-main / .bare) — never something to
+# wt-go/wt-done into.
 function global:Get-GitWorktreePaths {
-    git worktree list --porcelain |
-        Where-Object { $_ -match '^worktree ' } |
-        ForEach-Object { $_ -replace '^worktree ', '' }
+    $gitDir = Get-WorktreeGitDir
+    if (-not $gitDir) { return @() }
+    $paths   = [System.Collections.Generic.List[string]]::new()
+    $current = $null
+    $isBare  = $false
+    foreach ($line in (git --git-dir=$gitDir worktree list --porcelain)) {
+        if ($line -match '^worktree (.+)$') {
+            $current = $matches[1]
+            $isBare  = $false
+        } elseif ($line -eq 'bare') {
+            $isBare = $true
+        } elseif ($line -eq '') {
+            if ($current -and -not $isBare) { $paths.Add($current) }
+            $current = $null
+        }
+    }
+    if ($current -and -not $isBare) { $paths.Add($current) }
+    return $paths
 }
 
 function global:wt-go {
     param([Parameter(Mandatory)][string]$Name)
-    if (-not (Assert-GitRepo)) { return }
     $match = Get-GitWorktreePaths |
         Where-Object { $_ -like "*$Name*" } |
         Select-Object -First 1
     if ($match) { Set-Location $match } else { Write-Host "No worktree matching '$Name'" }
 }
 
-function global:wt-list { if (-not (Assert-GitRepo)) { return }; git worktree list }
+function global:wt-list {
+    $gitDir = Get-WorktreeGitDir
+    if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
+    git --git-dir=$gitDir worktree list
+}
 
 # Create a feature worktree at <project-root>\feature\<TicketId>-<Desc>
 function global:wt-feature {
@@ -40,11 +83,12 @@ function global:wt-feature {
         [Parameter(Mandatory)][string]$Desc,
         [string]$Base = 'develop'
     )
-    if (-not (Assert-GitRepo)) { return }
+    $gitDir = Get-WorktreeGitDir
+    if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
     $Desc   = $Desc -replace ' ', '_'
     $root   = Get-GitWorktreeRoot
     $wtPath = Join-Path $root "feature\$TicketId-$Desc"
-    git worktree add $wtPath -b "feature/$TicketId-$Desc" $Base
+    git --git-dir=$gitDir worktree add $wtPath -b "feature/$TicketId-$Desc" $Base
 }
 
 # Create a fix worktree at <project-root>\fix\<TicketId>-<Desc>
@@ -54,51 +98,54 @@ function global:wt-fix {
         [Parameter(Mandatory)][string]$Desc,
         [string]$Base = 'develop'
     )
-    if (-not (Assert-GitRepo)) { return }
+    $gitDir = Get-WorktreeGitDir
+    if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
     $Desc   = $Desc -replace ' ', '_'
     $root   = Get-GitWorktreeRoot
     $wtPath = Join-Path $root "fix\$TicketId-$Desc"
-    git worktree add $wtPath -b "fix/$TicketId-$Desc" $Base
+    git --git-dir=$gitDir worktree add $wtPath -b "fix/$TicketId-$Desc" $Base
 }
 
 # Checkout an existing branch into a worktree, preserving path structure.
 # e.g. wt-c feature/ABC-123-foo -> <project-root>\feature\ABC-123-foo
 function global:wt-c {
     param([Parameter(Mandatory)][string]$Branch)
-    if (-not (Assert-GitRepo)) { return }
+    $gitDir = Get-WorktreeGitDir
+    if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
     $root   = Get-GitWorktreeRoot
     $wtPath = Join-Path $root ($Branch -replace '/', '\')
-    git worktree add $wtPath $Branch
+    git --git-dir=$gitDir worktree add $wtPath $Branch
 }
 
 # Remove a worktree and delete its local branch
 function global:wt-done {
     param([Parameter(Mandatory)][string]$Name)
-    if (-not (Assert-GitRepo)) { return }
     $match = Get-GitWorktreePaths |
         Where-Object { $_ -like "*$Name*" } |
         Select-Object -First 1
     if (-not $match) { Write-Host "No worktree matching '$Name'"; return }
+    $gitDir = Get-WorktreeGitDir
+    if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
     $branch = git -C $match branch --show-current
-    git worktree remove $match
-    if ($branch) { git branch -d $branch }
+    git --git-dir=$gitDir worktree remove $match
+    if ($branch) { git --git-dir=$gitDir branch -d $branch }
 }
 
 function global:wt-done-f {
     param([Parameter(Mandatory)][string]$Name)
-    if (-not (Assert-GitRepo)) { return }
     $match = Get-GitWorktreePaths |
         Where-Object { $_ -like "*$Name*" } |
         Select-Object -First 1
     if (-not $match) { Write-Host "No worktree matching '$Name'"; return }
+    $gitDir = Get-WorktreeGitDir
+    if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
     $branch = git -C $match branch --show-current
-    git worktree remove --force $match
-    if ($branch) { git branch -D $branch }
+    git --git-dir=$gitDir worktree remove --force $match
+    if ($branch) { git --git-dir=$gitDir branch -D $branch }
 }
 
 # Show git status for every worktree in the current repo
 function global:wt! {
-    if (-not (Assert-GitRepo)) { return }
     Get-GitWorktreePaths | ForEach-Object {
         Write-Host "`n=== $_ ===" -ForegroundColor Cyan
         git -C $_ status --short
@@ -106,7 +153,11 @@ function global:wt! {
 }
 
 # Prune stale worktree references
-function global:wt-prune { if (-not (Assert-GitRepo)) { return }; git worktree prune -v }
+function global:wt-prune {
+    $gitDir = Get-WorktreeGitDir
+    if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
+    git --git-dir=$gitDir worktree prune -v
+}
 
 # Fix repos missing a fetch refspec (common when set up via git remote add rather than git clone).
 function global:fix-fetch-refspecs {

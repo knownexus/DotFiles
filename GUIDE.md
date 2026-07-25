@@ -104,7 +104,7 @@ git additions · optional tool integrations · sig-predictor · not ported
 Nothing here is actually new — `gsl`, `localignore`, `pushdr-f`, the
 `grev` family, `wt-setup`'s salvage logic, and `wt-workspace` all
 already existed in this repo (it was the *source* for the zsh port).
-One real fix came back the other way:
+Two real fixes came back the other way:
 
 > **`grev-clean`'s empty-amend message** — if commit B undoes
 > *everything* commit A did, stripping it leaves nothing to amend and
@@ -112,6 +112,19 @@ One real fix came back the other way:
 > failed — run rebase --abort." Now it detects that specific case and
 > gives the real recovery options: `--allow-empty`, `rebase --skip`, or
 > `--abort`. Found and fixed on the zsh side first, ported back here.
+>
+> **`wt-go`/`wt-list`/`wt-feature`/`wt-fix`/`wt-c`/`wt-done`/`wt-done-f`/
+> `wt!`/`wt-prune` all failed with "not a git repository" when run from
+> a `wt-setup`/`wt-workspace` root** (a plain folder containing
+> `.git-main`/`.bare` plus the worktree subdirs) — exactly the natural
+> place to run them from, since you're not yet inside any specific
+> worktree. `git worktree list/add/remove/prune` only work from inside
+> an actual working tree or the bare repo itself. Added
+> `Get-WorktreeGitDir`, which resolves to `.git-main`/`.bare` when
+> sitting at a workspace root, and threaded it through every worktree
+> command via `--git-dir`. This bug actually originated *here* — the
+> zsh side inherited it from this file, and it was found and fixed
+> there first via a real bug report, then ported back.
 
 ## Optional tool integrations (gated on being installed)
 
