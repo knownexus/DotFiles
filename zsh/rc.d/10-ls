@@ -89,8 +89,8 @@ _ls_wide_list() {
 _ls_long_list() {
     local -a items=("$@")
     (( ${#items[@]} == 0 )) && return
-    printf "%s%s %-7s     %-12s     %7s      %s%s\n" "$_LS_BOLD" "$_LS_GRAY" "Mode" "Modified" "Size" "Name" "$_LS_RESET"
-    printf "%s %s%s\n" "$_LS_GRAY" "------------------------------------------------" "$_LS_RESET"
+    printf "%s%s %-7s %-12s %7s  %s%s\n" "$_LS_BOLD" "$_LS_GRAY" "Mode" "Modified" "Size" "Name" "$_LS_RESET"
+    printf "%s %s%s\n" "$_LS_GRAY" "----------------------------------------" "$_LS_RESET"
     local it stat_line mode epoch size sizestr date name color dc=0 fc=0
     for it in "${items[@]}"; do
         color=$(_ls_entry_color "$it")
@@ -109,7 +109,7 @@ _ls_long_list() {
             name="${it:t}"
             (( fc++ ))
         fi
-        printf "%s %-7s     %-12s     %7s      %s%s%s%s\n" "$_LS_GRAY" "$mode" "$date" "$sizestr" "$_LS_RESET" "$color" "$name" "$_LS_RESET"
+        printf "%s %-7s %-12s %7s  %s%s%s%s\n" "$_LS_GRAY" "$mode" "$date" "$sizestr" "$_LS_RESET" "$color" "$name" "$_LS_RESET"
     done
     local dirword="dirs" fileword="files"
     (( dc == 1 )) && dirword="dir"
