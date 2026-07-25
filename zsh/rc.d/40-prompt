@@ -403,7 +403,7 @@ else
 fi
 
 # Prompt as machine%                                           /path/on/right
-PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}${_SHELLDEPTH}%(1j.[%j] .)$ "
+PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}${_SHELLDEPTH}%(1j.[%j] .)%(?..%F{red}✗%f )$ "
 RPS1="%(1V.${_VCS_RPROMPT}.%(4~|.../%3~|%~))"
 
 if [ "x$debian_chroot" = "x" -a -e /etc/debian_chroot ]; then
@@ -411,6 +411,6 @@ if [ "x$debian_chroot" = "x" -a -e /etc/debian_chroot ]; then
 fi
 
 if [ "x$debian_chroot" != "x" ]; then
-  PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}/$debian_chroot${_SHELLDEPTH}%(1j.[%j] .)%(1V.${_VCS_PROMPT}.)%# "
+  PS1="%(5V.${_SUDO_ALLOWED}.${_SUDO_RESET})%m${_SUDO_RESET}/$debian_chroot${_SHELLDEPTH}%(1j.[%j] .)%(?..%F{red}✗%f )%(1V.${_VCS_PROMPT}.)%# "
 fi
 
