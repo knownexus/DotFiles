@@ -1,8 +1,5 @@
 Clone to .resources
 
-~/.zshenv
-fpath=(~/.resources/zsh/complete $fpath)
-
 ~/.zshrc
 source ~/.resources/zsh/rc
 
