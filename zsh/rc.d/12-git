@@ -868,7 +868,16 @@ SCRIPT
 
     git commit --amend --no-edit
     if (( $? != 0 )); then
-        echo "Amend failed — run 'git rebase --abort' to recover." >&2
+        if git diff --cached --quiet HEAD^ 2>/dev/null; then
+            echo "" >&2
+            echo "$shortA's changes are now fully cancelled out by $shortB — amending would leave it empty." >&2
+            echo "Run one of:" >&2
+            echo "  git commit --amend --allow-empty --no-edit && git rebase --continue   # keep an empty marker commit" >&2
+            echo "  git rebase --skip                                                      # drop $shortA entirely" >&2
+            echo "  git rebase --abort                                                     # give up, restore original history" >&2
+        else
+            echo "Amend failed — run 'git rebase --abort' to recover." >&2
+        fi
         return 1
     fi
 
@@ -928,7 +937,7 @@ grev-scan() {
     # loops) — zsh emits a stray "name=value" line to stdout when a bare
     # `local` is re-declared across loop iterations.
     local min_len=10
-    local sha date subject key line_no content i n a b
+    local sha date subject key content i n a b
     local ei rest esign eline opposite ej rest2 esign2 gkey ftype
     local esc reset yellow cyan red green gray
     local orig_idx rev_idx rfile f rrest rcontent rtype rline rec
@@ -941,30 +950,57 @@ grev-scan() {
 
     echo "Scanning $range for redundant changes..." >&2
 
-    while IFS=$'\t' read -r sha date subject; do
-        shas+=("$sha"); dates+=("$date"); subjects+=("$subject")
-    done < <(git log --format='%H%x09%ad%x09%s' --date=short --reverse "$range" 2>/dev/null)
+    # Single streamed `git log -p` over the whole range (rather than a
+    # separate `git show` per commit per direction) — this is the only part
+    # of the range-scanning path whose cost grows with the number of commits,
+    # so it's worth keeping to one subprocess instead of 2*N.
+    typeset -A index  # key: file\x1fcontent -> " idx:sign:line idx:sign:line ..."
+    local cidx=0 line file oldl newl c1 c2
+    file=""; oldl=0; newl=0
+    while IFS= read -r line; do
+        if [[ "$line" == 'COMMIT:'* ]]; then
+            rest="${line#COMMIT:}"
+            sha="${rest%%:*}"; rest="${rest#*:}"
+            date="${rest%%:*}"; subject="${rest#*:}"
+            ((cidx++))
+            shas+=("$sha"); dates+=("$date"); subjects+=("$subject")
+            file=""; oldl=0; newl=0
+            continue
+        fi
+        if [[ "$line" == '+++ b/'* ]]; then
+            file="${line#+++ b/}"; oldl=0; newl=0; continue
+        fi
+        if [[ "$line" == '@@'* ]]; then
+            oldl=$(grep -oP '(?<=-)\d+' <<< "$line" | head -1)
+            newl=$(grep -oP '(?<=\+)\d+' <<< "$line" | head -1)
+            continue
+        fi
+        [[ -z "$file" || $cidx -eq 0 ]] && continue
+        (( ${#line} < 1 )) && continue
+        c1="${line:0:1}"; c2="${line:1:1}"
+        if [[ "$c1" == '+' && "$c2" != '+' ]]; then
+            content="${line:1}"; content="${content%"${content##*[![:space:]]}"}"
+            if (( ${#content} >= min_len )); then
+                key="${file}"$'\x1f'"${content}"
+                index[$key]+=" ${cidx}:+:${newl}"
+            fi
+            ((newl++))
+        elif [[ "$c1" == '-' && "$c2" != '-' ]]; then
+            content="${line:1}"; content="${content%"${content##*[![:space:]]}"}"
+            if (( ${#content} >= min_len )); then
+                key="${file}"$'\x1f'"${content}"
+                index[$key]+=" ${cidx}:-:${oldl}"
+            fi
+            ((oldl++))
+        else
+            ((oldl++)); ((newl++))
+        fi
+    done < <(git log -p --format='COMMIT:%H:%ad:%s' --date=short --reverse "$range" 2>/dev/null)
 
     if (( ${#shas[@]} == 0 )); then
         echo "No commits found in range '$range'." >&2
         return 0
     fi
-
-    typeset -A index  # key: file\x1fcontent -> " idx:sign:line idx:sign:line ..."
-
-    for (( i=1; i<=${#shas[@]}; i++ )); do
-        sha="${shas[i]}"
-        while IFS=$'\t' read -r key line_no; do
-            content="${key#*$'\x1f'}"
-            (( ${#content} >= min_len )) || continue
-            index[$key]+=" ${i}:+:${line_no}"
-        done < <(_grev_diff_pairs "$sha" '+')
-        while IFS=$'\t' read -r key line_no; do
-            content="${key#*$'\x1f'}"
-            (( ${#content} >= min_len )) || continue
-            index[$key]+=" ${i}:-:${line_no}"
-        done < <(_grev_diff_pairs "$sha" '-')
-    done
 
     typeset -A groups  # key: origIdx|revIdx -> "\x01file\x1fcontent\x1ftype\x1fline ..."
 
