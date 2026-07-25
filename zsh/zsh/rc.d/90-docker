@@ -1,0 +1,6 @@
+# -*- sh -*-
+
+# Configure docker as as I like it.
+
+alias dbuild='docker run -it -v ~/projects/buildstream:/src/buildstream --workdir /src/buildstream buildstream/buildstream-fedora:latest /bin/bash'
+

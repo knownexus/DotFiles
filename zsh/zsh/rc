@@ -1,0 +1,31 @@
+#! /bin/zsh
+# -*- sh -*-
+
+# Extended globbing
+setopt extended_glob
+# zsh: exit 1 stylee stuff
+setopt print_exit_value
+# turn off annoying vim style tab completion
+setopt no_auto_menu
+# Enable partial list style completion
+zstyle ':completion:*' list-suffixes true
+# Bash-style null glob result -> no error
+setopt null_glob
+# Diable auto titling of tabs
+DISABLE_AUTO_TITLE="true"
+
+# Emacs keybindings
+bindkey -e
+
+RESDIR=~/.resources
+
+if [ -d ~/bin ]; then
+  PATH=~/bin:$PATH
+  export PATH
+fi
+
+for F in $RESDIR/zsh/rc.d/([a-zA-Z0-9-]##)(.); do
+  source $F
+done
+
+source $RESDIR/zsh/z-s-h/zsh-syntax-highlighting.zsh

@@ -1,0 +1,40 @@
+# -*- sh -*-
+
+TITLESTACK=("WARNING: HIT ROCK BOTTOM")
+
+settitle()
+{
+    case x$TERM; in
+        *xterm*)
+            echo -n -e '\e]0;'"$*"'\a'
+            ;;
+    esac
+}
+
+entitle()
+{
+    TITLESTACK=("$TITLESTACK[@]" "$*")
+    settitle $TITLESTACK[-1]
+}
+
+poptitle()
+{
+    TITLESTACK[-1]=()
+    settitle $TITLESTACK[-1]
+}
+
+title_precmd () { settitle "zsh: " $(pwd) }
+
+entitled ()
+{
+    entitle "$1"
+    shift
+    "$@"
+    poptitle
+}
+
+preexec ()
+{
+    settitle "zsh running: $2"
+    _notify_preexec "$2"
+}

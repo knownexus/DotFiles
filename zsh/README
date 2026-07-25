@@ -1,0 +1,6 @@
+Clone to .resources
+
+~/.zshrc
+source ~/.resources/zsh/rc
+
+

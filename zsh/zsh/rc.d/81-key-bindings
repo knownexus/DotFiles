@@ -1,0 +1,25 @@
+bindkey "^[[1;5C" forward-word
+bindkey "^[[1;5D" backward-word
+
+# Prefix-aware history search — type part of a command, then Up/Down cycles
+# only through history entries starting with what you've typed so far,
+# instead of the full unfiltered history.
+autoload -Uz history-search-end
+zle -N history-beginning-search-backward-end history-search-end
+zle -N history-beginning-search-forward-end history-search-end
+bindkey "^[[A" history-beginning-search-backward-end
+bindkey "^[[B" history-beginning-search-forward-end
+
+# Alt+H — jump to the man page for whatever command is on the line
+autoload -Uz run-help
+(( ${+aliases[run-help]} )) && unalias run-help
+autoload -Uz run-help-git run-help-svn run-help-sudo 2>/dev/null
+bindkey "^[h" run-help
+
+# Shift+Tab — enter the arrow-key-navigable completion menu on demand.
+# AUTO_MENU (unset via no_auto_menu in the main rc, "turn off annoying
+# vim style tab completion") means repeated plain Tab never auto-enters
+# the menu, so `zstyle ':completion:*' menu select` alone never actually
+# triggers — this gives the menu a key of its own instead of touching
+# that long-standing Tab behavior.
+bindkey "^[[Z" menu-complete

@@ -1,0 +1,214 @@
+# -*- sh -*-
+
+# ------------------------------
+# Directory & file exclusions
+# ------------------------------
+EXCLUDE_DIRS="--exclude-dir=obj --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=logs --exclude-dir=Migrations --exclude-dir=dist --exclude-dir=dist_electron"
+EXCLUDE_DIRS2="$EXCLUDE_DIRS --exclude-dir=bin"
+EXCLUDE_FILES="--exclude=*.svg"
+
+# ------------------------------
+# Output settings
+# ------------------------------
+CHAR_LIMIT=500
+BLUE='\033[0;34m'
+NC='\033[0m'
+LINE_PREFIX="ln "
+
+# ------------------------------
+# Safe search function
+# ------------------------------
+search_grep() {
+  local pattern="$1"
+  local limit="${2:-500}"
+  local exclude_dirs="${3:-}"
+
+  if [[ -z "$pattern" ]]; then
+    echo "Usage: ${FUNCNAME[0]} <pattern>"
+    return 1
+  fi
+
+  grep -rniI $exclude_dirs --exclude=*.svg . -e "$pattern" 2>/dev/null | \
+      sed -E "s|^([^:]+):([0-9]+):(.*)$|\033[0;34m\1\033[0m\nln \2: \3\n|" | \
+      cut -c -"${limit}"
+}
+
+# ------------------------------
+# Search aliases
+# ------------------------------
+unalias g g1 g2 2>/dev/null
+
+g()  { search_grep "$1"; }
+g1() { search_grep "$1" 500 "$EXCLUDE_DIRS"; }
+g2() { search_grep "$1" 500 "$EXCLUDE_DIRS2"; }
+
+# rg-based search (ripgrep) — faster, respects .gitignore automatically
+_SEARCH_EXCLUDE_DIRS=(.git node_modules obj bin logs Migrations dist dist_electron .vs .idea)
+
+rgs() {
+    local exclude_args=()
+    for d in "${_SEARCH_EXCLUDE_DIRS[@]}"; do exclude_args+=(--glob "!$d/**"); done
+    rg -n --color=always "${exclude_args[@]}" "$@"
+}
+rgs1() { rg -n --color=always '--glob=!.git/**' '--glob=!.claude/**' '--glob=!.idea/**' "$@"; }
+rgs2() { rg -n --color=always '--glob=!.git/**' '--glob=!node_modules/**' '--glob=!.claude/**' '--glob=!.idea/**' "$@"; }
+
+# ------------------------------
+# General aliases
+# ------------------------------
+alias bye='exit'
+alias md='mkdir'
+alias ng='grep -v'
+alias r='reset'
+alias remspace='sed -i '\''s/[[:space:]]*$//'\'' *'
+alias cp='cp -i'
+alias mv='mv -i'
+
+# ------------------------------
+# rm — moves to a local trash folder instead of deleting outright.
+# Restore with `trash-restore <name>`, or permanently clear with
+# `trash-empty`. Internal cleanup elsewhere in this config uses
+# `command rm` to bypass this and delete for real.
+# ------------------------------
+_TRASH_DIR="${HOME}/.trash"
+
+rm() {
+    mkdir -p "$_TRASH_DIR"
+    local f base dest had_target=0
+    for f in "$@"; do
+        [[ "$f" == -* ]] && continue
+        had_target=1
+        if [[ ! -e "$f" && ! -L "$f" ]]; then
+            echo "rm: no such file or directory: $f" >&2
+            continue
+        fi
+        base=$(basename "$f")
+        dest="$_TRASH_DIR/$base"
+        [[ -e "$dest" ]] && dest="${dest}.$(date +%s)"
+        command mv -- "$f" "$dest"
+        echo "Trashed: $f  (restore with: trash-restore $(basename "$dest"))"
+    done
+    (( had_target )) || echo "Usage: rm <file> [file ...]" >&2
+}
+rmr() { rm "$@"; }
+
+trash-restore() {
+    if [[ $# -eq 0 ]]; then
+        echo "Usage: trash-restore <name> [name ...]" >&2
+        echo "In trash:" >&2
+        ls -1 "$_TRASH_DIR" 2>/dev/null
+        return 1
+    fi
+    local name
+    for name in "$@"; do
+        if [[ -e "$_TRASH_DIR/$name" ]]; then
+            command mv -- "$_TRASH_DIR/$name" ./
+            echo "Restored: $name"
+        else
+            echo "Not found in trash: $name" >&2
+        fi
+    done
+}
+
+trash-empty() {
+    if [[ ! -d "$_TRASH_DIR" ]]; then
+        echo "Trash is already empty."
+        return 0
+    fi
+    local count
+    count=$(find "$_TRASH_DIR" -mindepth 1 -maxdepth 1 | wc -l)
+    if (( count == 0 )); then
+        echo "Trash is already empty."
+        return 0
+    fi
+    printf "Permanently delete %d item(s) from %s? (y/n) " "$count" "$_TRASH_DIR"
+    read -r ans
+    if [[ "$ans" == "y" ]]; then
+        command rm -rf -- "${_TRASH_DIR:?}"/*(DN)
+        echo "Trash emptied."
+    else
+        echo "Aborted."
+    fi
+}
+
+# ------------------------------
+# CD shortcuts
+# ------------------------------
+alias cdh='cd ~'
+alias rp='cd ~/repos'
+alias rps='cd ~/repos/ShatteredRealms'
+alias rpsource='cd ~/.resources/zsh'
+
+# ------------------------------
+# Vim shortcuts
+# ------------------------------
+alias v='vim'
+alias vb='vim ~/.resources/zsh/rc.d'
+
+# ------------------------------
+# Reload Zsh config
+# ------------------------------
+alias sb='source ~/.resources/zsh/rc'
+
+TREE_EXCLUDE='obj|.git|node_modules|logs|Migrations|dist|dist_electron|bin'
+alias tre='tree -I "$TREE_EXCLUDE" .'
+
+# ------------------------------
+# Navigation
+# ------------------------------
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+
+# cd - for toggling previous directory (zsh supports this natively via pushd,
+# but make it explicit for parity)
+alias cdh='cd ~'
+
+# ------------------------------
+# Repo shortcuts  (mirrors pwsh rp* aliases, Linux paths)
+# ------------------------------
+alias rpp='cd ~/repos/pwsh'
+alias rpz='cd ~/repos/zsh'
+alias rpa='cd ~/repos/DriveFurtherAPI/develop'
+alias rpam='cd ~/repos/DriveFurtherAPI/master'
+alias rpn='cd ~/repos/DriveFurtherNucleus/develop'
+alias rpnm='cd ~/repos/DriveFurtherNucleus/master'
+alias rpc='cd ~/repos/CirrusAutomatedTests'
+alias rpm='cd ~/repos/ManagementDashboard'
+alias rpnc='cd ~/repos/NexusCommunity'
+
+# ------------------------------
+# Editor
+# ------------------------------
+alias c='claude'
+
+# ------------------------------
+# Filesystem helpers
+# ------------------------------
+# open — launch a file/URL with the default app (Linux)
+alias open='xdg-open'
+
+# path — show PATH entries one per line
+path() { echo "$PATH" | tr ':' '\n'; }
+
+# psgrep — find a running process by partial name
+psgrep() { ps aux | grep -i "$1" | grep -v grep; }
+
+# brk — horizontal rule across the terminal
+brk() {
+    local width="${COLUMNS:-80}"
+    printf '%*s\n' "$width" '' | tr ' ' '─'
+}
+
+# remspace — strip trailing whitespace from all files in current dir
+# (existing alias handles single file; this handles dir-wide)
+remspace_dir() { find . -maxdepth 1 -type f | xargs sed -i 's/[[:space:]]*$//' ; }
+
+# copy — pipe stdin to the system clipboard (Wayland/X11, whichever is available)
+if (( ${+commands[wl-copy]} )); then
+    copy() { wl-copy; }
+elif (( ${+commands[xclip]} )); then
+    copy() { xclip -selection clipboard; }
+elif (( ${+commands[xsel]} )); then
+    copy() { xsel --clipboard --input; }
+fi

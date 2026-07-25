@@ -1,0 +1,37 @@
+# -*- sh -*-
+#
+# fzf integration — inert until fzf is actually installed, mirroring the
+# graceful-degradation pattern already used elsewhere in this config
+# (dircolors in 10-ls, bzr/svn in 40-prompt): the moment `fzf` is on PATH,
+# this lights up with no further setup.
+
+if (( ${+commands[fzf]} )); then
+    () {
+        local base candidate
+        for candidate in /usr/share/fzf/shell /usr/share/fzf /usr/share/doc/fzf/examples ~/.fzf/shell ~/.fzf; do
+            [[ -d "$candidate" ]] && { base="$candidate"; break }
+        done
+        [[ -n "$base" && -f "$base/key-bindings.zsh" ]] && source "$base/key-bindings.zsh"
+        [[ -n "$base" && -f "$base/completion.zsh"   ]] && source "$base/completion.zsh"
+    }
+
+    export FZF_DEFAULT_OPTS="--height=40% --layout=reverse --border"
+
+    # Fuzzy-pick a worktree and cd into it
+    wt-gof() {
+        local match
+        match=$(_wt_paths | fzf --prompt="worktree> ") || return
+        cd "$match"
+    }
+
+    # Fuzzy-pick a local or remote branch and check it out
+    gitcf() {
+        local branch
+        branch=$(
+            { git branch 2>/dev/null | sed 's/^[* ] //'
+              git branch -r 2>/dev/null | grep -v ' -> ' | sed 's|^[[:space:]]*[^/]*/||'
+            } | sort -u | fzf --prompt="branch> "
+        ) || return
+        git checkout "$branch"
+    }
+fi

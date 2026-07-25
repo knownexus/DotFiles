@@ -1,0 +1,29 @@
+# -*- sh -*-
+#
+# Desktop notification when a command that took a while (>REPORTTIME, the
+# same threshold that already triggers zsh's own "it took N seconds" report)
+# finishes — useful for a build/test kicked off then tabbed away from.
+#
+# preexec() (00-entitle) and precmd() (40-prompt) are plain functions, not
+# add-zsh-hook chains, so this hooks in via a one-line call added to each of
+# those rather than defining a second preexec/precmd that would silently
+# replace them.
+
+zmodload zsh/datetime
+
+typeset -g _NOTIFY_LAST_CMD=""
+typeset -g _NOTIFY_START_EPOCH=0
+
+_notify_preexec() {
+    _NOTIFY_LAST_CMD="$1"
+    _NOTIFY_START_EPOCH=$EPOCHSECONDS
+}
+
+_notify_precmd() {
+    (( _NOTIFY_START_EPOCH == 0 )) && return
+    local elapsed=$(( EPOCHSECONDS - _NOTIFY_START_EPOCH ))
+    _NOTIFY_START_EPOCH=0
+    (( elapsed < ${REPORTTIME:-10} )) && return
+    (( ${+commands[notify-send]} )) || return
+    notify-send "Command finished (${elapsed}s)" "${_NOTIFY_LAST_CMD}" 2>/dev/null
+}

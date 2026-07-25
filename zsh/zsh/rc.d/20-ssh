@@ -1,0 +1,22 @@
+# -*- sh -*-
+
+# My standard SSHisms
+
+ssh ()
+{
+    entitle "[ssh] $@ [ssh]"
+    =ssh "$@"
+    poptitle
+}
+
+ssx ()
+{
+    entitle "[ssh-X] $@ [ssh-X]"
+    =ssh -X "$@"
+    poptitle
+}
+
+# And some zsh styling to include known_hosts in ssh completion
+
+zstyle -e ':completion::*:*:*:hosts' hosts 'reply=(${=${${(f)"$(cat {/etc/ssh_,~/.ssh/known_}hosts(|2)(N) /dev/null)"}%%[# ]*}//,/ })'
+

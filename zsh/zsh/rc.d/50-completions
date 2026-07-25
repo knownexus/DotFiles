@@ -1,0 +1,93 @@
+# -*- sh -*-
+
+# A handy-dandy function for reloading completions we might hack on
+compreload ()
+{
+   ARG="$1"
+   unfunction _$ARG
+   autoload _$ARG
+}
+
+# Required for the `menu select` zstyle below to do anything at all — it
+# provides the menu-select widget and the menuselect keymap that Tab/arrow
+# keys navigate once the completion menu is showing. Without this, `menu
+# select` is silently inert: candidates list on the first Tab same as
+# always, but a second Tab and the arrow keys do nothing.
+zmodload zsh/complist
+
+# The following lines were added by compinstall
+
+zstyle ':completion:*' auto-description 'specify: %d'
+zstyle ':completion:*' completer _complete _ignored
+zstyle ':completion:*' expand prefix suffix
+zstyle ':completion:*' file-sort name
+zstyle ':completion:*' format 'Completions for %d'
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+zstyle ':completion:*' list-prompt %SAt %p: Hit TAB for more, or the character to insert%s
+zstyle ':completion:*' matcher-list '' 'r:|[._-]=* r:|=*'
+# Arrow-key-navigable completion menu — composes with no_auto_menu (set in
+# the main rc): first Tab lists candidates, a second consecutive Tab enters
+# the selectable menu.
+zstyle ':completion:*' menu select
+zstyle ':completion:*' preserve-prefix '//[^/]##/'
+zstyle ':completion:*' squeeze-slashes true
+zstyle ':completion:*' use-compctl false
+zstyle ':completion:*' verbose true
+zstyle :compinstall filename "${HOME}/.resources/zsh/rc.d/50-completions"
+
+autoload -Uz compinit
+compinit -u
+# End of lines added by compinstall
+
+# Cache completion results (branch lists, docker/git subcommands, etc.) —
+# noticeably speeds up completion generators that shell out.
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path "${HOME}/.zsh_cache"
+mkdir -p "${HOME}/.zsh_cache"
+
+# ---------------------------------------------------------------------------
+# Worktree completions for wt-go, wt-done, wt-done-f
+# Completes the last path segment of each worktree
+# ---------------------------------------------------------------------------
+_wt_name_complete() {
+    local -a worktrees
+    worktrees=($(git worktree list --porcelain 2>/dev/null \
+        | grep '^worktree ' | sed 's/^worktree //' \
+        | grep -v '\.git$' \
+        | xargs -I{} basename {}))
+    compadd -a worktrees
+}
+compdef _wt_name_complete wt-go wt-done wt-done-f
+
+# ---------------------------------------------------------------------------
+# Branch completions
+# ---------------------------------------------------------------------------
+_local_branches() {
+    local -a branches
+    branches=($(git branch 2>/dev/null | sed 's/^[* ] //'))
+    compadd -a branches
+}
+
+_all_branches() {
+    local -a branches
+    branches=($(
+        { git branch 2>/dev/null | sed 's/^[* ] //'
+          git branch -r 2>/dev/null | grep -v ' -> ' | sed 's|^[[:space:]]*[^/]*/||'
+        } | sort -u
+    ))
+    compadd -a branches
+}
+
+_remote_branches() {
+    local -a branches
+    branches=($(git branch -r 2>/dev/null | grep -v ' -> ' | sed 's|^[[:space:]]*[^/]*/||' | sort -u))
+    compadd -a branches
+}
+
+compdef _all_branches   gitc
+compdef _local_branches gitb
+compdef _local_branches gri
+compdef _local_branches grim
+compdef _remote_branches pushdr
+compdef _remote_branches pushdr-f
