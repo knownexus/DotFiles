@@ -105,7 +105,6 @@ aliases() {
         "lla"$'\x1f'"ls -al"$'\x1f'"long listing including dotfiles"
         "ls"$'\x1f'"ls --color=auto"$'\x1f'"colorized (plain ls if dircolors isn't installed)"
         "md"$'\x1f'"mkdir"$'\x1f'"make a directory"
-        "rmr"$'\x1f'"rm -r"$'\x1f'"remove a directory recursively"
         "mcd <dir>"$'\x1f'"mkdir -p && cd"$'\x1f'"create a directory and cd into it in one step"
         "tre"$'\x1f'"tree -I ..."$'\x1f'"directory tree, excluding build/vcs noise dirs"
         "v <file>"$'\x1f'"vim"$'\x1f'"open in vim"
@@ -114,6 +113,10 @@ aliases() {
         "odx1 <file>"$'\x1f'"od -t x1 -A x"$'\x1f'"1-byte hex dump"
         "remspace"$'\x1f'"sed -i ..."$'\x1f'"strip trailing whitespace from the current dir's files"
         "remspace_dir"$'\x1f'"(custom)"$'\x1f'"strip trailing whitespace, dir-wide"
+        "rm  rmr"$'\x1f'"mv to ~/.trash"$'\x1f'"delete a file/dir (recoverable — see trash-restore)"
+        "trash-restore <name>"$'\x1f'"(custom)"$'\x1f'"bring something back out of ~/.trash"
+        "trash-empty"$'\x1f'"(custom)"$'\x1f'"permanently clear ~/.trash (confirms first)"
+        "cp  mv"$'\x1f'"cp -i / mv -i"$'\x1f'"confirm before overwriting a file"
 
         "SECTION"$'\x1f'"Navigation"
         "cdh"$'\x1f'"cd ~"$'\x1f'"home"
@@ -124,6 +127,8 @@ aliases() {
         "rps  rpa  rpam"$'\x1f'"cd ~/repos/..."$'\x1f'"project shortcuts (ShatteredRealms, DriveFurtherAPI)"
         "rpn  rpnm  rpc"$'\x1f'"cd ~/repos/..."$'\x1f'"more project shortcuts"
         "rpm  rpnc"$'\x1f'"cd ~/repos/..."$'\x1f'"more project shortcuts"
+        "cd -N  cd -<Tab>"$'\x1f'"pushd/popd (automatic)"$'\x1f'"hop back through recently-visited directories"
+        "z <partial-name>"$'\x1f'"zoxide (if installed)"$'\x1f'"jump to a frecently-visited directory"
 
         "SECTION"$'\x1f'"Search"
         "g <pattern>"$'\x1f'"grep -rniI ."$'\x1f'"recursive search, common noise dirs excluded"
@@ -146,10 +151,13 @@ aliases() {
         "brk"$'\x1f'"(custom)"$'\x1f'"horizontal rule across the terminal"
         "c"$'\x1f'"claude"$'\x1f'"launch Claude Code"
         "open <path>"$'\x1f'"xdg-open"$'\x1f'"launch a file/URL with the default app"
+        "copy"$'\x1f'"wl-copy/xclip/xsel"$'\x1f'"pipe stdin to the system clipboard (if installed)"
+        "cheat  allaliases"$'\x1f'"(custom)"$'\x1f'"show this cheatsheet (aliases + gitaliases)"
 
-        "SECTION"$'\x1f'"Project / docker"
+        "SECTION"$'\x1f'"Project / workspace"
         "make-project <name> <licence>"$'\x1f'"(custom)"$'\x1f'"git init + add a licence file"
         "dbuild"$'\x1f'"docker run ..."$'\x1f'"buildstream dev container"
+        "repos-status [root]"$'\x1f'"(custom)"$'\x1f'"scan ~/repos for uncommitted/unpushed work"
     )
     _print_alias_cheatsheet "General aliases" "${e[@]}"
 }
@@ -190,7 +198,7 @@ gitaliases() {
         "SECTION"$'\x1f'"Restore & reset"
         "gres  gitres"$'\x1f'"git checkout --"$'\x1f'"discard working tree changes to a file"
         "gress"$'\x1f'"git restore --staged"$'\x1f'"move staged changes back to working tree"
-        "grh [commit]"$'\x1f'"git reset --hard"$'\x1f'"discard all changes, optionally to a commit"
+        "grh [commit]"$'\x1f'"git reset --hard"$'\x1f'"discard all changes, optionally to a commit (confirms first)"
         "gup"$'\x1f'"git reset HEAD~1"$'\x1f'"undo last commit, leave changes unstaged"
 
         "SECTION"$'\x1f'"Archive & ignore"
@@ -205,6 +213,7 @@ gitaliases() {
         "gitc <branch>"$'\x1f'"git checkout"$'\x1f'"switch branch or restore files"
         "gitcb <branch>"$'\x1f'"git checkout -b"$'\x1f'"create and switch to a new branch"
         "gitcd"$'\x1f'"git checkout develop"$'\x1f'"switch to develop"
+        "gitcf"$'\x1f'"fzf (if installed)"$'\x1f'"fuzzy-pick a local/remote branch and check it out"
 
         "SECTION"$'\x1f'"Stash"
         "gst  stash"$'\x1f'"git stash push"$'\x1f'"save dirty state onto the stash"
@@ -213,7 +222,7 @@ gitaliases() {
 
         "SECTION"$'\x1f'"Cherry-pick & clean"
         "gitcp <commit>"$'\x1f'"git cherry-pick"$'\x1f'"apply a commit onto the current branch"
-        "gclean"$'\x1f'"git clean -fd"$'\x1f'"delete untracked files and directories"
+        "gclean"$'\x1f'"git clean -fd"$'\x1f'"delete untracked files and directories (confirms first)"
 
         "SECTION"$'\x1f'"Fetch & pull"
         "gitf"$'\x1f'"git fetch"$'\x1f'"download changes from remote"
@@ -222,7 +231,7 @@ gitaliases() {
         "updated"$'\x1f'"git fetch + rebase"$'\x1f'"sync with origin/develop"
 
         "SECTION"$'\x1f'"Push"
-        "gpf  gitfp  gitpf"$'\x1f'"git push --force"$'\x1f'"force-push"
+        "gpf  gitfp  gitpf"$'\x1f'"git push --force"$'\x1f'"force-push (confirms first)"
         "gp1"$'\x1f'"git push --set-upstream"$'\x1f'"push and set upstream tracking"
         "pushdr <branch>"$'\x1f'"push -u origin local:remote"$'\x1f'"push to a differently-named remote branch"
         "pushdr-f <branch>"$'\x1f'"push -uf origin local:remote"$'\x1f'"force-push to a differently-named remote branch"
@@ -255,6 +264,7 @@ gitaliases() {
         "SECTION"$'\x1f'"Worktree"
         "wt-list"$'\x1f'"git worktree list"$'\x1f'"list all worktrees"
         "wt-go <name>"$'\x1f'"cd"$'\x1f'"cd to a worktree by name fragment"
+        "wt-gof"$'\x1f'"fzf (if installed)"$'\x1f'"fuzzy-pick a worktree and cd to it"
         "wt-feature <id> <desc>"$'\x1f'"worktree add -b feature/..."$'\x1f'"create a feature branch worktree"
         "wt-fix <id> <desc>"$'\x1f'"worktree add -b fix/..."$'\x1f'"create a fix branch worktree"
         "wt-c <branch>"$'\x1f'"git worktree add"$'\x1f'"checkout an existing branch as a worktree"

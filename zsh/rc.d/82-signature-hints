@@ -118,6 +118,11 @@ _SIGHINT_SIGS=(
     wt-setup        "-b <branch,...> [-n name] [-u clone-url] [-p path]"
     wt-workspace    "<path> <repo-url,...> <branch,...>"
     fix-fetch-refspecs "[root]"
+
+    # Workspace / misc
+    repos-status    "[root]"
+    trash-restore   "<name> [name ...]"
+    z               "<partial-name>"
 )
 
 # Every known alias/function — including no-arg ones — so prefix matching
@@ -140,6 +145,7 @@ _SIGHINT_ALL_COMMANDS=(
     gri grim grd grm gro groi grod grof rebaseon gitra gitrc groot
     grev grev-clean grev-scan
     wt-go wt-list wt-feature wt-fix wt-c wt-done wt-done-f wt! wt-prune wt-setup wt-workspace fix-fetch-refspecs
+    copy cheat repos-status trash-restore trash-empty wt-gof gitcf z
 )
 
 _sighint_compute() {
