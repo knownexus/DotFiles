@@ -107,120 +107,25 @@ function global:gitaliases {
     $gray   = "${esc}[90m"
     $reset  = "${esc}[0m"
 
-    # Each entry: @(aliases, git-command, description)
-    $sections = [ordered]@{
-        'Status & info' = @(
-            @('gstat  g!  git!',          'git status (custom)',            'colour-coded status with branch and ahead/behind'),
-            @('gbl',                      'git blame',                      'annotate each line with last-changing commit'),
-            @('gs  gits',                 'git show',                       'inspect a commit, tag, or blob'),
-            @('gitsn',                    'git show --name-only',           'list files changed in a commit'),
-            @('gsl',                      'git show | less',                'inspect a commit, paged'),
-            @('rs',                       'clear; git status',              'clear screen then show status')
-        )
-        'Log' = @(
-            @('gl  gitl',                 'git log',                        'pretty full log, scrollable via less'),
-            @('gl2  gitl2',               'git log --shortstat',            'full log with per-commit file-change counts'),
-            @('gitlg',                    'git log --graph',                'branching graph log'),
-            @('gitlg2',                   'git log --oneline --graph',      'compact one-line graph log')
-        )
-        'Staging' = @(
-            @('ga  gita',                 'git add',                        'stage files'),
-            @('gau  gitau',               'git add -u',                     'stage all changes to tracked files'),
-            @('gaw',                      'git diff -w | git apply --cached','stage all changes, ignoring whitespace'),
-            @('gaw1 <pattern>',           'git apply --cached --include',   'stage matching files, ignoring whitespace')
-        )
-        'Diff' = @(
-            @('gdf',                      'git diff',                       'show unstaged changes'),
-            @('gdfs',                     'git diff --staged',              'show staged changes'),
-            @('gdf1',                     'git diff HEAD~1',                'show changes introduced by the last commit')
-        )
-        'Commit' = @(
-            @('gc',                       'git commit',                     'open editor and commit'),
-            @('gitcm <msg>',              'git commit -m',                  'commit with an inline message'),
-            @('gitca  gca',               'git commit --amend',             'rewrite the last commit'),
-            @('uncommit',                 'git reset --soft HEAD^',         'undo last commit, keep changes staged')
-        )
-        'Restore & reset' = @(
-            @('gres  gitres',             'git checkout --',                'discard working tree changes to a file'),
-            @('gress',                    'git restore --staged',           'move staged changes back to working tree'),
-            @('grh [commit]',             'git reset --hard',               'discard all changes, optionally to a commit (confirms first)'),
-            @('gup',                      'git reset HEAD~1',               'undo last commit, leave changes unstaged')
-        )
-        'Archive & ignore' = @(
-            @('gar [name]',               'git archive HEAD',               'zip HEAD into <name>-<hash>.zip'),
-            @('localignore <pattern>',    '.git/info/exclude',              'ignore files locally without touching .gitignore'),
-            @('ignoreme',                 'git update-index --assume-unchanged',    'stop tracking local changes to a file'),
-            @('dontignoreme',             'git update-index --no-assume-unchanged', 'resume tracking local changes to a file'),
-            @('gitrmc',                   'git rm --cached',                'remove a file from the index only')
-        )
-        'Branch & checkout' = @(
-            @('gitb',                     'git branch',                     'list or manage branches'),
-            @('gitc <branch>',            'git checkout',                   'switch branch or restore files'),
-            @('gitcb <branch>',           'git checkout -b',                'create and switch to a new branch'),
-            @('gitcd',                    'git checkout develop',           'switch to develop'),
-            @('gitcf',                    'PSFzf (if installed)',           'fuzzy-pick a branch and check it out')
-        )
-        'Stash' = @(
-            @('gst  stash',               'git stash push',                 'save dirty state onto the stash'),
-            @('gp  stashp',               'git stash pop',                  'restore the most recent stash entry'),
-            @('gstl',                     'git stash list',                 'list stash entries')
-        )
-        'Cherry-pick & clean' = @(
-            @('gitcp <commit>',           'git cherry-pick',                'apply a commit onto the current branch'),
-            @('gclean',                   'git clean -fd',                  'delete untracked files and directories (confirms first)')
-        )
-        'Fetch & pull' = @(
-            @('gitf',                     'git fetch',                      'download changes from remote'),
-            @('gitpl',                    'git pull --rebase',              'fetch and rebase onto upstream'),
-            @('update',                   'git fetch + rebase',             'sync current branch with origin'),
-            @('updated',                  'git fetch + rebase',             'sync with origin/develop')
-        )
-        'Push' = @(
-            @('gpf  gitfp  gitpf',        'git push --force',               'force-push (confirms first)'),
-            @('gp1',                      'git push --set-upstream',        'push and set upstream tracking'),
-            @('pushdr <branch>',          'git push -u origin local:remote','push to a differently-named remote branch'),
-            @('pushdr-f <branch>',        'git push -uf origin local:remote','force-push to a differently-named remote branch')
-        )
-        'Remote' = @(
-            @('gru',                      'git remote update',              'fetch all remotes'),
-            @('grpo',                     'git remote prune origin',        'remove stale remote-tracking refs'),
-            @('giturl',                   'git config --get remote.origin.url', 'print the remote URL'),
-            @('gitremote-reset  remote!', 'git fetch + reset --hard',       'hard-reset current branch to remote HEAD')
-        )
-        'Rebase' = @(
-            @('gri [n|commit]',           'git rebase -i',                  'interactively rewrite history'),
-            @('grim [n|commit]',          'git rebase -i --rebase-merges',  'interactive rebase, preserving merge commits'),
-            @('grd',                      'git rebase develop',             'rebase current branch onto develop'),
-            @('grm',                      'git rebase master',              'rebase current branch onto master'),
-            @('gro',                      'git fetch + rebase FETCH_HEAD',  'sync and rebase onto origin/<current>'),
-            @('groi',                     'git fetch + rebase -i FETCH_HEAD','sync and interactive rebase onto origin/<current>'),
-            @('grod',                     'git fetch + rebase FETCH_HEAD',  'sync and rebase onto origin/develop'),
-            @('grof <branch>',            'git fetch + rebase FETCH_HEAD',  'sync and rebase onto named remote branch'),
-            @('rebaseon <fragment>',      'git rebase',                     'rebase onto branch matching partial name'),
-            @('gitra  gitra2',            'git rebase --abort',             'abort an in-progress rebase'),
-            @('gitrc',                    'git rebase --continue',          'continue after resolving conflicts'),
-            @('groot',                    'git rebase -i --root master',    'rebase all commits from the very first')
-        )
-        'Reverted changes' = @(
-            @('grev <A> <B>',             '(custom script)',                'show changes A made that B later undid'),
-            @('grev-clean <A> <B>',       '(custom script)',                'rewrite A to remove those redundant changes'),
-            @('grev-scan [range]',        '(custom script)',                'scan a commit range for changes later reverted')
-        )
-        'Worktree' = @(
-            @('wt-list',                  'git worktree list',              'list all worktrees'),
-            @('wt-go <name>',             'Set-Location',                   'cd to a worktree by name fragment'),
-            @('wt-gof',                   'PSFzf (if installed)',           'fuzzy-pick a worktree and cd to it'),
-            @('wt-feature <id> <desc>',   'git worktree add -b feature/...','create a feature branch worktree'),
-            @('wt-fix <id> <desc>',       'git worktree add -b fix/...',    'create a fix branch worktree'),
-            @('wt-c <branch>',            'git worktree add',               'checkout an existing branch as a worktree'),
-            @('wt-done <name>',           'git worktree remove + branch -d','remove a worktree and delete its local branch'),
-            @('wt-done-f <name>',         'git worktree remove -f + branch -D','force-remove a worktree and delete its branch'),
-            @('wt!',                      'git status (all worktrees)',     'show status across every worktree'),
-            @('wt-prune',                 'git worktree prune',             'clean up stale worktree references'),
-            @('wt-setup <branches>',      '(custom)',                       'single-repo bare clone with branch worktrees'),
-            @('wt-workspace',             '(custom script)',                'multi-repo workspace with per-repo worktrees'),
-            @('fix-fetch-refspecs [root]','git config + remote update',     'repair missing fetch refspecs across repos')
-        )
+    # Reads the "git" table out of the shared commands.yaml (also consumed
+    # by the zsh side's gitaliases) via yq, instead of keeping a second
+    # hand-maintained copy of the same ~90-entry table here.
+    $yamlPath = Join-Path $script:SHAREDDIR 'commands.yaml'
+    if (-not (Get-Command yq -ErrorAction SilentlyContinue)) {
+        Write-Host "gitaliases: yq not found -- install it (winget install MikeFarah.yq) to see this table" -ForegroundColor Yellow
+        return
+    }
+
+    $sectionNames = @(& yq -r '.git[].section' $yamlPath)
+    $sections = [ordered]@{}
+    for ($i = 0; $i -lt $sectionNames.Count; $i++) {
+        $rows = @(& yq -r ".git[$i].commands[] | [.keys, .cmd, .desc] | @tsv" $yamlPath)
+        $entries = @()
+        foreach ($row in $rows) {
+            $parts = $row -split "`t"
+            $entries += , @($parts[0], $parts[1], $parts[2])
+        }
+        $sections[$sectionNames[$i]] = $entries
     }
 
     # Derive column widths from the data so nothing gets clipped.

@@ -1,0 +1,456 @@
+# Canonical command/alias data shared by the zsh and pwsh dotfiles.
+# Consumed by both shells' `aliases`/`gitaliases`/`cheat` functions so the
+# cheatsheet tables never drift out of sync between platforms again.
+#
+# cmd is the underlying real command being wrapped/customized (omitted for
+# purely custom functions with no direct equivalent). desc is shown as-is on
+# both platforms; where behavior genuinely differs by OS (e.g. trash mechanism,
+# clipboard tool), a platform-specific override can replace desc/cmd via a
+# `zsh:`/`pwsh:` sub-block instead of the shared 'cmd'/'desc' keys.
+
+general:
+- section: File system
+  commands:
+  - keys: ls [path]
+    desc: colored, name-only 3-column grid (top-to-bottom fill)
+    cmd: (custom)
+  - keys: l [path]
+    desc: plain wide name-only listing, colored by file type
+    cmd: (custom)
+  - keys: ll [path]
+    desc: one-per-line long listing, mode/date/size + dir/file count summary
+    cmd: (custom)
+  - keys: la [path]
+    desc: same as ls, including dotfiles
+    cmd: (custom)
+  - keys: lla [path]
+    desc: same as ll, including dotfiles
+    cmd: (custom)
+  - keys: md
+    desc: make a directory
+    cmd: mkdir
+  - keys: mcd <dir>
+    desc: create a directory and cd into it in one step
+    cmd: mkdir -p && cd
+  - keys: tre
+    desc: directory tree, excluding build/vcs noise dirs
+    cmd: tree -I ...
+  - keys: v <file>
+    desc: open in vim
+    cmd: vim
+  - keys: vb
+    desc: edit this zsh config
+    cmd: vim rc.d/
+  - keys: odx <file>
+    desc: 4-byte hex dump
+    cmd: od -t x4 -A x
+  - keys: odx1 <file>
+    desc: 1-byte hex dump
+    cmd: od -t x1 -A x
+  - keys: remspace
+    desc: strip trailing whitespace from the current dir's files
+    cmd: sed -i ...
+  - keys: remspace_dir
+    desc: strip trailing whitespace, dir-wide
+    cmd: (custom)
+  - keys: rm  rmr
+    desc: delete a file/dir (recoverable — see trash-restore)
+    cmd: mv to ~/.trash
+  - keys: trash-restore <name>
+    desc: bring something back out of ~/.trash
+    cmd: (custom)
+  - keys: trash-empty
+    desc: permanently clear ~/.trash (confirms first)
+    cmd: (custom)
+  - keys: cp  mv
+    desc: confirm before overwriting a file
+    cmd: cp -i / mv -i
+- section: Navigation
+  commands:
+  - keys: cdh
+    desc: home
+    cmd: cd ~
+  - keys: .. / ... / ....
+    desc: step up one/two/three directories
+    cmd: cd .. / ../.. / ../../..
+  - keys: rp
+    desc: repos root
+    cmd: cd ~/repos
+  - keys: rpz  rpp
+    desc: this project / the pwsh sibling project
+    cmd: cd ~/repos/{zsh,pwsh}
+  - keys: rpsource
+    desc: the deployed config (symlinked to rpz)
+    cmd: cd ~/.resources/zsh
+  - keys: rps  rpa  rpam
+    desc: project shortcuts (ShatteredRealms, DriveFurtherAPI)
+    cmd: cd ~/repos/...
+  - keys: rpn  rpnm  rpc
+    desc: more project shortcuts
+    cmd: cd ~/repos/...
+  - keys: rpm  rpnc
+    desc: more project shortcuts
+    cmd: cd ~/repos/...
+  - keys: cd -N  cd -<Tab>
+    desc: hop back through recently-visited directories
+    cmd: pushd/popd (automatic)
+  - keys: z <partial-name>
+    desc: jump to a frecently-visited directory
+    cmd: zoxide (if installed)
+- section: Search
+  commands:
+  - keys: g <pattern>
+    desc: recursive search, common noise dirs excluded
+    cmd: grep -rniI .
+  - keys: g1 <pattern>
+    desc: recursive search, fuller exclusion list
+    cmd: grep (full excludes)
+  - keys: g2 <pattern>
+    desc: recursive search, excludes + bin/
+    cmd: grep (excl. + bin)
+  - keys: rgs <pattern>
+    desc: ripgrep search, common noise dirs excluded
+    cmd: rg -n
+  - keys: rgs1 <pattern>
+    desc: ripgrep, minimal exclusions
+    cmd: rg -n (minimal)
+  - keys: rgs2 <pattern>
+    desc: ripgrep, excludes node_modules too
+    cmd: rg -n (broader)
+  - keys: fch <pattern>
+    desc: search C/H source files
+    cmd: find *.c/*.h | grep
+  - keys: fchs <pattern>
+    desc: search C/H/asm source files
+    cmd: find *.c/*.h/*.s/*.S
+- section: Shell utilities
+  commands:
+  - keys: bye
+    desc: leave the shell
+    cmd: exit
+  - keys: r
+    desc: clear/reset the terminal
+    cmd: reset
+  - keys: ng
+    desc: invert-match grep
+    cmd: grep -v
+  - keys: sb
+    desc: reload this zsh config
+    cmd: source rc
+  - keys: fr <find> <repl> [path]
+    desc: find & replace across files
+    cmd: (custom)
+  - keys: path
+    desc: print \$PATH one entry per line
+    cmd: (custom)
+  - keys: psgrep <name>
+    desc: find a running process by partial name
+    cmd: (custom)
+  - keys: brk
+    desc: horizontal rule across the terminal
+    cmd: (custom)
+  - keys: c
+    desc: launch Claude Code
+    cmd: claude
+  - keys: open <path>
+    desc: launch a file/URL with the default app
+    cmd: xdg-open
+  - keys: copy
+    desc: pipe stdin to the system clipboard (if installed)
+    cmd: wl-copy/xclip/xsel
+  - keys: cheat  allaliases
+    desc: show this cheatsheet (aliases + gitaliases)
+    cmd: (custom)
+  - keys: zsh-doctor
+    desc: show which optional integrations (fzf, bat, ...) are active
+    cmd: (custom)
+  - keys: view <file>
+    desc: syntax-highlighted, paged file viewer
+    cmd: bat (if installed)
+- section: Project / workspace
+  commands:
+  - keys: make-project <name> <licence>
+    desc: git init + add a licence file
+    cmd: (custom)
+  - keys: dbuild
+    desc: buildstream dev container
+    cmd: docker run ...
+  - keys: repos-status [root]
+    desc: scan ~/repos for uncommitted/unpushed work
+    cmd: (custom)
+git:
+- section: Status & info
+  commands:
+  - keys: gstat  g!  git!
+    desc: colour-coded status with branch and ahead/behind
+    cmd: git status (custom)
+  - keys: gbl
+    desc: annotate each line with last-changing commit
+    cmd: git blame
+  - keys: gs  gits
+    desc: inspect a commit, tag, or blob
+    cmd: git show
+  - keys: gitsn
+    desc: list files changed in a commit
+    cmd: git show --name-only
+  - keys: gsl
+    desc: inspect a commit, paged
+    cmd: git show | less
+  - keys: rs
+    desc: clear screen then show status
+    cmd: clear; git status
+- section: Log
+  commands:
+  - keys: gl  gitl
+    desc: pretty full log, scrollable via less
+    cmd: git log
+  - keys: gl2  gitl2
+    desc: full log with per-commit file-change counts
+    cmd: git log --shortstat
+  - keys: gitlg
+    desc: branching graph log
+    cmd: git log --graph
+  - keys: gitlg2
+    desc: compact one-line graph log
+    cmd: git log --oneline --graph
+- section: Staging
+  commands:
+  - keys: ga  gita
+    desc: stage files
+    cmd: git add
+  - keys: gau  gitau
+    desc: stage all changes to tracked files
+    cmd: git add -u
+  - keys: gaw
+    desc: stage all changes, ignoring whitespace
+    cmd: diff -w | apply --cached
+  - keys: gaw1 <pattern>
+    desc: stage matching files, ignoring whitespace
+    cmd: apply --cached --include
+- section: Diff
+  commands:
+  - keys: gdf
+    desc: show unstaged changes
+    cmd: git diff
+  - keys: gdfs
+    desc: show staged changes
+    cmd: git diff --staged
+  - keys: gdf1
+    desc: show changes introduced by the last commit
+    cmd: git diff HEAD~1
+- section: Commit
+  commands:
+  - keys: gc
+    desc: open editor and commit
+    cmd: git commit
+  - keys: gitcm <msg>
+    desc: commit with an inline message
+    cmd: git commit -m
+  - keys: gitca  gca
+    desc: rewrite the last commit
+    cmd: git commit --amend
+  - keys: uncommit
+    desc: undo last commit, keep changes staged
+    cmd: git reset --soft HEAD^
+- section: Restore & reset
+  commands:
+  - keys: gres  gitres
+    desc: discard working tree changes to a file
+    cmd: git checkout --
+  - keys: gress
+    desc: move staged changes back to working tree
+    cmd: git restore --staged
+  - keys: grh [commit]
+    desc: discard all changes, optionally to a commit (confirms first)
+    cmd: git reset --hard
+  - keys: gup
+    desc: undo last commit, leave changes unstaged
+    cmd: git reset HEAD~1
+- section: Archive & ignore
+  commands:
+  - keys: gar [name]
+    desc: zip HEAD into <name>-<hash>.zip
+    cmd: git archive HEAD
+  - keys: localignore <pattern>
+    desc: ignore files locally without touching .gitignore
+    cmd: .git/info/exclude
+  - keys: ignoreme
+    desc: stop tracking local changes to a file
+    cmd: update-index --assume-unchanged
+  - keys: dontignoreme
+    desc: resume tracking local changes to a file
+    cmd: update-index --no-assume-unchanged
+  - keys: gitrmc
+    desc: remove a file from the index only
+    cmd: git rm --cached
+- section: Branch & checkout
+  commands:
+  - keys: gitb
+    desc: list or manage branches
+    cmd: git branch
+  - keys: gitc <branch>
+    desc: switch branch or restore files
+    cmd: git checkout
+  - keys: gitcb <branch>
+    desc: create and switch to a new branch
+    cmd: git checkout -b
+  - keys: gitcd
+    desc: switch to develop
+    cmd: git checkout develop
+  - keys: gitcf
+    desc: fuzzy-pick a local/remote branch and check it out
+    cmd: fzf (if installed)
+- section: Stash
+  commands:
+  - keys: gst  stash
+    desc: save dirty state onto the stash
+    cmd: git stash push
+  - keys: gp  stashp
+    desc: restore the most recent stash entry
+    cmd: git stash pop
+  - keys: gstl
+    desc: list stash entries
+    cmd: git stash list
+- section: Cherry-pick & clean
+  commands:
+  - keys: gitcp <commit>
+    desc: apply a commit onto the current branch
+    cmd: git cherry-pick
+  - keys: gclean
+    desc: delete untracked files and directories (confirms first)
+    cmd: git clean -fd
+- section: Fetch & pull
+  commands:
+  - keys: gitf
+    desc: download changes from remote
+    cmd: git fetch
+  - keys: gitpl
+    desc: fetch and rebase onto upstream
+    cmd: git pull --rebase
+  - keys: update
+    desc: sync current branch with origin
+    cmd: git fetch + rebase
+  - keys: updated
+    desc: sync with origin/develop
+    cmd: git fetch + rebase
+- section: Push
+  commands:
+  - keys: gpf  gitfp  gitpf
+    desc: force-push (confirms first)
+    cmd: git push --force
+  - keys: gp1
+    desc: push and set upstream tracking
+    cmd: git push --set-upstream
+  - keys: pushdr <branch>
+    desc: push to a differently-named remote branch
+    cmd: push -u origin local:remote
+  - keys: pushdr-f <branch>
+    desc: force-push to a differently-named remote branch
+    cmd: push -uf origin local:remote
+- section: Remote
+  commands:
+  - keys: gru
+    desc: fetch all remotes
+    cmd: git remote update
+  - keys: grpo
+    desc: remove stale remote-tracking refs
+    cmd: git remote prune origin
+  - keys: giturl
+    desc: print the remote URL
+    cmd: config --get remote.origin.url
+  - keys: gitremote-reset  remote!
+    desc: hard-reset current branch to remote HEAD
+    cmd: git fetch + reset --hard
+- section: Rebase
+  commands:
+  - keys: gri [n|commit]
+    desc: interactively rewrite history
+    cmd: git rebase -i
+  - keys: grim [n|commit]
+    desc: interactive rebase, preserving merge commits
+    cmd: rebase -i --rebase-merges
+  - keys: grd
+    desc: rebase current branch onto develop
+    cmd: git rebase develop
+  - keys: grm
+    desc: rebase current branch onto master
+    cmd: git rebase master
+  - keys: gro
+    desc: sync and rebase onto origin/<current>
+    cmd: git fetch + rebase FETCH_HEAD
+  - keys: groi
+    desc: sync and interactive rebase onto origin/<current>
+    cmd: git fetch + rebase -i FETCH_HEAD
+  - keys: grod
+    desc: sync and rebase onto origin/develop
+    cmd: git fetch + rebase FETCH_HEAD
+  - keys: grof <branch>
+    desc: sync and rebase onto named remote branch
+    cmd: git fetch + rebase FETCH_HEAD
+  - keys: rebaseon  rebase <fragment>
+    desc: rebase onto branch matching partial name
+    cmd: git rebase
+  - keys: gitra
+    desc: abort an in-progress rebase
+    cmd: git rebase --abort
+  - keys: gitrc
+    desc: continue after resolving conflicts
+    cmd: git rebase --continue
+  - keys: groot
+    desc: rebase all commits from the very first
+    cmd: rebase -i --root master
+- section: Reverted changes
+  commands:
+  - keys: grev <A> <B>
+    desc: show changes A made that B later undid
+    cmd: (custom)
+  - keys: grev-clean <A> <B>
+    desc: rewrite A to remove those redundant changes
+    cmd: (custom)
+  - keys: grev-scan [range]
+    desc: scan a commit range for changes later reverted
+    cmd: (custom)
+- section: Worktree
+  commands:
+  - keys: wt-list
+    desc: list all worktrees
+    cmd: git worktree list
+  - keys: wt-go <name>
+    desc: cd to a worktree by name fragment
+    cmd: cd
+  - keys: wt-gof
+    desc: fuzzy-pick a worktree and cd to it
+    cmd: fzf (if installed)
+  - keys: wt-feature <id> <desc>
+    desc: create a feature branch worktree
+    cmd: worktree add -b feature/...
+  - keys: wt-fix <id> <desc>
+    desc: create a fix branch worktree
+    cmd: worktree add -b fix/...
+  - keys: wt-c <branch>
+    desc: checkout an existing branch as a worktree
+    cmd: git worktree add
+  - keys: wt-done <name>
+    desc: remove a worktree and delete its local branch
+    cmd: worktree remove + branch -d
+  - keys: wt-done-f <name>
+    desc: force-remove a worktree and delete its branch
+    cmd: worktree remove -f + branch -D
+  - keys: wt!
+    desc: show status across every worktree
+    cmd: git status (all worktrees)
+  - keys: wt-prune
+    desc: clean up stale worktree references
+    cmd: git worktree prune
+  - keys: wt-repair [--all [root]]
+    desc: fix stale worktree links after copying/syncing a workspace
+    cmd: git worktree repair
+  - keys: wt-setup <branches>
+    desc: single-repo bare clone with branch worktrees
+    cmd: (custom)
+  - keys: wt-workspace <path> <repos> <branches>
+    desc: multi-repo workspace with per-repo worktrees
+    cmd: (custom script)
+  - keys: fix-fetch-refspecs [root]
+    desc: repair missing fetch refspecs across repos
+    cmd: config + remote update

@@ -1,0 +1,219 @@
+# -*- sh -*-
+
+# Useful functions
+
+mcd () { mkdir -p "$1"; cd "$1"; }
+
+odx () { od -t x4 -A x "$@" ; }
+
+odx1 () { od -t x1 -A x "$@" ; }
+
+fch () { find . -type f -name "*.[ch]" | xargs grep "$@" }
+
+fchs () { find . -type f -name "*.[chsS]" | xargs grep "$@" }
+
+# Git related handy-handy stuff
+
+make-project () { mcd "$1"; git init; cp /usr/share/common-licenses/$2 COPYING; git add COPYING; git commit -m "This project is under the $2 licence at this time"; }
+
+# Haskell related handy stuff
+
+cabal-dev-here () { CABAL_SANDBOX="$(pwd)/cabal-dev"; export CABAL_SANDBOX; }
+
+# We prevented ^D == EOF earlier (30-settings) so now, let's have a clever
+# ^D handler which does normal ^D behaviour, and also turns exit into popd
+# if the stack isn't empty...
+clever_logout_widget () {
+    if test "x$BUFFER" != "x"; then
+	# Buffer is non-empty, need to do usual ^D behaviour
+	# CURSOR is the offer into BUFFER, we need to remove the character
+	# at CURSOR in BUFFER
+	local BUFLEFT BUFRIGHT
+	BUFLEFT="$BUFFER[0,$CURSOR]"
+	BUFRIGHT="$BUFFER[$((CURSOR + 2)),-1]"
+	BUFFER="${BUFLEFT}${BUFRIGHT}"
+	zle -R
+    elif test "x$dirstack" != "x"; then
+	# Need to popd
+	popd 2>/dev/null >/dev/null
+	zle -I
+	zle -R
+    else
+	# Need to exit
+	exit
+    fi
+}
+
+zle -N clever_logout_widget
+
+bindkey '^D' clever_logout_widget
+
+# Alias Functions
+
+function fr { grep -rl "$1" "$3" | xargs sed -i "s/$1/$2/g" }
+
+# ---------------------------------------------------------------------------
+# Alias cheatsheets — mirrors pwsh's aliases / gitaliases / allaliases
+# ---------------------------------------------------------------------------
+
+# Renders a list of "alias\x1fcommand\x1fdescription" entries (or
+# "SECTION\x1fname" section-header entries) as an aligned, coloured table.
+_print_alias_cheatsheet() {
+    local title="$1"; shift
+    local -a entries=("$@")
+    local esc=$'\033' reset bold yellow cyan gray
+    reset="${esc}[0m"; bold="${esc}[1m"; yellow="${esc}[33m"; cyan="${esc}[36m"; gray="${esc}[90m"
+
+    local entry a rest c d
+    local alias_width=0 cmd_width=0
+    for entry in "${entries[@]}"; do
+        [[ "$entry" == SECTION$'\x1f'* ]] && continue
+        a="${entry%%$'\x1f'*}"
+        rest="${entry#*$'\x1f'}"
+        c="${rest%%$'\x1f'*}"
+        (( ${#a} > alias_width )) && alias_width=${#a}
+        (( ${#c} > cmd_width ))   && cmd_width=${#c}
+    done
+    (( alias_width += 2 ))
+    (( cmd_width += 2 ))
+
+    echo ""
+    echo "  ${bold}${cyan}${title}${reset}"
+    echo "  ${gray}${(r:$((alias_width + cmd_width + 20))::─:)}${reset}"
+
+    for entry in "${entries[@]}"; do
+        if [[ "$entry" == SECTION$'\x1f'* ]]; then
+            echo ""
+            echo "  ${yellow}${entry#SECTION$'\x1f'}${reset}"
+            continue
+        fi
+        a="${entry%%$'\x1f'*}"
+        rest="${entry#*$'\x1f'}"
+        c="${rest%%$'\x1f'*}"
+        d="${rest#*$'\x1f'}"
+        printf "    %s${gray}%s${reset}%s\n" "${(r:$alias_width:)a}" "${(r:$cmd_width:)c}" "$d"
+    done
+    echo ""
+}
+
+# Loads one top-level group ("general" or "git") from the shared
+# commands.yaml (used by both the zsh and pwsh sides) into the same flat
+# "alias\x1fcommand\x1fdescription" / "SECTION\x1fname" shape
+# _print_alias_cheatsheet already expects — so the rendering code below
+# never needed to change, only where the data comes from.
+_load_cheat_entries() {
+    local group="$1" yaml="$SHAREDDIR/commands.yaml"
+    if (( ! ${+commands[yq]} )); then
+        print -u2 "cheat: yq not found — install it to see this table (dnf/apt/brew install yq)"
+        return 1
+    fi
+    local -a sections
+    sections=(${(f)"$(yq -r ".${group}[].section" "$yaml" 2>/dev/null)"})
+    local i=0 sec row
+    local -a rows
+    # $'\x1f' doesn't evaluate correctly as the replacement side of
+    # ${var//pat/repl} when written inline inside a double-quoted
+    # expansion — pre-assigning it to a variable first works around that.
+    local TAB=$'\t' US=$'\x1f'
+    for sec in "${sections[@]}"; do
+        print -- "SECTION"$'\x1f'"$sec"
+        rows=(${(f)"$(yq -r ".${group}[$i].commands[] | [.keys, .cmd, .desc] | @tsv" "$yaml" 2>/dev/null)"})
+        for row in "${rows[@]}"; do
+            print -- "${row//$TAB/$US}"
+        done
+        (( i++ ))
+    done
+}
+
+aliases() {
+    local -a e=(${(f)"$(_load_cheat_entries general)"})
+    _print_alias_cheatsheet "General aliases" "${e[@]}"
+}
+
+gitaliases() {
+    local -a e=(${(f)"$(_load_cheat_entries git)"})
+    _print_alias_cheatsheet "Git aliases" "${e[@]}"
+}
+
+allaliases() {
+    aliases
+    gitaliases
+}
+
+# ---------------------------------------------------------------------------
+# zsh-doctor — report which optional, tool-gated integrations are active.
+# Several features in this config (colorized man pages, fzf pickers, zoxide,
+# direnv, desktop notifications, clipboard) are inert until their underlying
+# tool is installed — this is the one place to see, at a glance, which of
+# those are actually live right now.
+# ---------------------------------------------------------------------------
+zsh-doctor() {
+    local esc=$'\033' reset green red gray
+    reset="${esc}[0m"; green="${esc}[32m"; red="${esc}[31m"; gray="${esc}[90m"
+
+    echo ""
+    echo "  Optional integrations"
+    echo "  ----------------------"
+
+    local -a checks=(
+        "dircolors:colorized ls / tab-completion menu"
+        "bat:colorized man pages, view (non-markdown)"
+        "glow:rendered markdown in view"
+        "fzf:Ctrl+R / Ctrl+T, wt-gof, gitcf"
+        "zoxide:z <partial-name>"
+        "direnv:per-project .envrc auto-loading"
+        "notify-send:desktop notification for long commands"
+        "bzr:bzr repo detection in the prompt"
+        "svn:svn repo detection in the prompt"
+    )
+    local check tool label
+    for check in "${checks[@]}"; do
+        tool="${check%%:*}"
+        label="${check#*:}"
+        if (( ${+commands[$tool]} )); then
+            echo "  ${green}✓${reset} ${tool}  ${gray}${label}${reset}"
+        else
+            echo "  ${red}✗${reset} ${tool}  ${gray}${label} — not installed${reset}"
+        fi
+    done
+
+    echo ""
+    local clip="none found"
+    (( ${+commands[wl-copy]} )) && clip="wl-copy"
+    [[ "$clip" == "none found" ]] && (( ${+commands[xclip]} )) && clip="xclip"
+    [[ "$clip" == "none found" ]] && (( ${+commands[xsel]} )) && clip="xsel"
+    if [[ "$clip" == "none found" ]]; then
+        echo "  ${red}✗${reset} clipboard (copy)  ${gray}none of wl-copy/xclip/xsel found${reset}"
+    else
+        echo "  ${green}✓${reset} clipboard (copy)  ${gray}using ${clip}${reset}"
+    fi
+    echo ""
+}
+
+# view — read-only file viewer. Markdown files render properly (headers,
+# bold, tables) via glow if it's installed; everything else is syntax-
+# highlighted via bat; falls back to less if neither is installed. Opt-in
+# name so plain `cat` behaviour and any scripts relying on it are untouched.
+view() {
+    if [[ $# -eq 0 ]]; then
+        echo "Usage: view <file> [file ...]" >&2
+        return 1
+    fi
+    if (( ${+commands[glow]} )) && [[ "$1" == *.md || "$1" == *.markdown ]]; then
+        # glow's "auto" style falls back to a plain, non-rendering "notty"
+        # mode whenever it can't positively confirm a real terminal (piped
+        # output, some terminal emulators, etc.) — headers/bold/tables are
+        # then left as literal #/**/| characters instead of being rendered.
+        # Forcing an explicit style avoids that. "pink" replaces heading
+        # markers with a clean bar instead of leaving them visible the way
+        # dark/light/dracula do — override with `export GLOW_STYLE=...` for
+        # any other bundled style.
+        local f
+        for f in "$@"; do glow -p -s "${GLOW_STYLE:-pink}" "$f"; done
+    elif (( ${+commands[bat]} )); then
+        bat --paging=always "$@"
+    else
+        less "$@"
+    fi
+}
+

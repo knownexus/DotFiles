@@ -1,6 +1,9 @@
 # pwsh
 
-PowerShell equivalent of [knownexus/zsh](https://github.com/knownexus/zsh) — same structure, same aliases, same logic, ported to PowerShell 5.1+ / PowerShell 7+.
+PowerShell equivalent of the zsh side of this repo — same structure, same aliases, same logic, ported to PowerShell 5.1+ / PowerShell 7+.
+
+> Superseded by the root `../bootstrap.ps1` — see `../README.md`. The manual
+> steps below still work if you'd rather do it yourself.
 
 ## Setup
 

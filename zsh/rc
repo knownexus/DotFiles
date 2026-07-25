@@ -18,14 +18,20 @@ DISABLE_AUTO_TITLE="true"
 bindkey -e
 
 RESDIR=~/.resources
+# The dotfiles monorepo puts zsh's own files at $RESDIR (a symlink to
+# <repo>/zsh), with data shared between the zsh and pwsh sides one level up
+# at <repo>/shared. :A resolves the symlink to a real path before taking the
+# parent with :h, so this still finds the right place regardless of how
+# $RESDIR itself is symlinked.
+SHAREDDIR=${RESDIR:A:h}/shared
 
 if [ -d ~/bin ]; then
   PATH=~/bin:$PATH
   export PATH
 fi
 
-for F in $RESDIR/zsh/rc.d/([a-zA-Z0-9-]##)(.); do
+for F in $RESDIR/rc.d/([a-zA-Z0-9-]##)(.); do
   source $F
 done
 
-source $RESDIR/zsh/z-s-h/zsh-syntax-highlighting.zsh
+source $RESDIR/z-s-h/zsh-syntax-highlighting.zsh

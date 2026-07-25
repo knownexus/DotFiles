@@ -1,6 +1,4 @@
-Clone to .resources
+Superseded by the root ../bootstrap.sh — see ../README.md.
 
-~/.zshrc
-source ~/.resources/zsh/rc
-
-
+(Old manual steps, if you need them: symlink this dir to ~/.resources, then
+add `source ~/.resources/rc` to ~/.zshrc.)
