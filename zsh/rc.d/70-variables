@@ -29,3 +29,12 @@ export REPO_ROOT REPO_SYMBOL
 CLAUDE_MODEL='claude-sonnet-4-6'
 CLAUDE_MODEL_FAST='claude-haiku-4-5-20251001'
 export CLAUDE_MODEL CLAUDE_MODEL_FAST
+
+# ---------------------------------------------------------------------------
+# Colorized man pages via bat, if installed — falls back to the default
+# pager otherwise.
+# ---------------------------------------------------------------------------
+if (( ${+commands[bat]} )); then
+    export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+    export MANROFFOPT="-c"
+fi
