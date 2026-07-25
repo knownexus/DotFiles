@@ -169,14 +169,12 @@ _gl_log_header() {
         echo "${gray}origin:${reset} ${cyan}${origin_short}${reset} ${gray}(${upstream})${reset}${ahead_str}${behind_str}"
     fi
 
-    local head_full
+    local head_full merge_sha base_short commit_count
     head_full=$(git rev-parse HEAD 2>/dev/null)
     for candidate in develop master main origin/develop origin/master origin/main; do
         [[ "$candidate" == "$branch" || "$candidate" == "origin/$branch" ]] && continue
-        local merge_sha
         merge_sha=$(git merge-base HEAD "$candidate" 2>/dev/null) || continue
         [[ "$merge_sha" == "$head_full" ]] && continue
-        local base_short commit_count
         base_short=$(git rev-parse --short=7 "$merge_sha")
         commit_count=$(git rev-list --count "${merge_sha}..HEAD" 2>/dev/null)
         echo "${gray}base:${reset}   ${green}${base_short}${reset} ${gray}(${candidate})${reset}  ${gray}${commit_count} commit(s) on this branch${reset}"
