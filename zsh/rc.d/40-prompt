@@ -342,7 +342,13 @@ which svn >/dev/null 2>&1 || {
     _find_svn () { return 1; }
 }
 
-which git-name-rev >/dev/null 2>&1 || test -x /usr/lib/git-core/git-name-rev || {
+# `name-rev` has been a built-in git subcommand (not a separate git-name-rev
+# binary) for well over a decade — the old check for a specific git-core
+# binary path (/usr/lib/git-core/...) doesn't hold on distros that use
+# /usr/libexec/git-core instead (this machine included), which silently
+# disabled git detection in the prompt entirely. The only real precondition
+# is that git itself is installed.
+which git >/dev/null 2>&1 || {
     _find_git () { return 1; }
 }
 
