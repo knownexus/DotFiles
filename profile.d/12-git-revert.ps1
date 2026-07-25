@@ -189,7 +189,19 @@ param([string]`$f)
         git commit --amend --no-edit
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "Amend failed — run 'git rebase --abort' to recover."
+            # Empty-amend is the common case here: if B undid everything A did,
+            # stripping it leaves nothing to commit relative to A's parent.
+            git diff --cached --quiet HEAD^ 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host ""
+                Write-Warning "$shortA's changes are now fully cancelled out by $shortB — amending would leave it empty."
+                Write-Host "Run one of:" -ForegroundColor DarkGray
+                Write-Host "  git commit --amend --allow-empty --no-edit; git rebase --continue   # keep an empty marker commit" -ForegroundColor DarkGray
+                Write-Host "  git rebase --skip                                                    # drop $shortA entirely" -ForegroundColor DarkGray
+                Write-Host "  git rebase --abort                                                   # give up, restore original history" -ForegroundColor DarkGray
+            } else {
+                Write-Error "Amend failed — run 'git rebase --abort' to recover."
+            }
             return
         }
 
