@@ -19,6 +19,10 @@ zstyle ':completion:*' group-name ''
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 zstyle ':completion:*' list-prompt %SAt %p: Hit TAB for more, or the character to insert%s
 zstyle ':completion:*' matcher-list '' 'r:|[._-]=* r:|=*'
+# Arrow-key-navigable completion menu — composes with no_auto_menu (set in
+# the main rc): first Tab lists candidates, a second consecutive Tab enters
+# the selectable menu.
+zstyle ':completion:*' menu select
 zstyle ':completion:*' preserve-prefix '//[^/]##/'
 zstyle ':completion:*' squeeze-slashes true
 zstyle ':completion:*' use-compctl false
