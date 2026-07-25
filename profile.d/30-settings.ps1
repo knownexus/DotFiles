@@ -1,5 +1,9 @@
 # Shell history and behaviour settings — mirrors zsh 30-settings
 
+# A command taking at least this many seconds triggers the long-command
+# desktop notification in 40-prompt.ps1 (mirrors REPORTTIME).
+$global:ReportTime = 10
+
 if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
     Import-Module PSReadLine -ErrorAction SilentlyContinue
 
@@ -31,4 +35,7 @@ if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
 
     # Emacs-style line editing (mirrors bindkey -e)
     Set-PSReadLineOption -EditMode Emacs
+
+    # No audible beep on tab-complete misses etc. (mirrors unsetopt BEEP)
+    Set-PSReadLineOption -BellStyle None
 }
