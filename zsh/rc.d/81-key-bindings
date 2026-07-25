@@ -9,3 +9,9 @@ zle -N history-beginning-search-backward-end history-search-end
 zle -N history-beginning-search-forward-end history-search-end
 bindkey "^[[A" history-beginning-search-backward-end
 bindkey "^[[B" history-beginning-search-forward-end
+
+# Alt+H — jump to the man page for whatever command is on the line
+autoload -Uz run-help
+(( ${+aliases[run-help]} )) && unalias run-help
+autoload -Uz run-help-git run-help-svn run-help-sudo 2>/dev/null
+bindkey "^[h" run-help
