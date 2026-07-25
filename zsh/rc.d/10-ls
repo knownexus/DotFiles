@@ -117,35 +117,23 @@ _ls_long_list() {
     printf "%s  %d %s, %d %s%s\n" "$_LS_GRAY" "$dc" "$dirword" "$fc" "$fileword" "$_LS_RESET"
 }
 
-# 3-column grid. Each column is sized to its own content (the widest name
-# actually landing in that column), not a fixed fraction of the terminal
-# width — a fixed-width split left a wall of empty padding after every
-# short name. Entries fill top-to-bottom then wrap to the next column,
-# like the wide/long listings' column-major order.
+# 3-column grid — names only, colored by type. No mode/date/size chrome;
+# that level of detail is ll's job. Each column is sized to its own
+# content (the widest name actually landing in that column), not a fixed
+# fraction of the terminal width. Entries fill top-to-bottom then wrap to
+# the next column, like the wide/long listings' column-major order.
 _ls_grid_list() {
     local -a items=("$@")
     (( ${#items[@]} == 0 )) && return
     local -i ncols=3
     local -i nrows=$(( (${#items[@]} + ncols - 1) / ncols ))
 
-    local -a modes dates sizes names colors
-    local it stat_line mode epoch size sizestr date name color rest
+    local -a names colors
+    local it name color
     for it in "${items[@]}"; do
         color=$(_ls_entry_color "$it")
-        stat_line=$(_ls_stat_line "$it")
-        mode="${stat_line%%|*}"
-        rest="${stat_line#*|}"
-        epoch="${rest%%|*}"
-        size="${rest#*|}"
-        date=$(strftime '%b %d %H:%M' "$epoch" 2>/dev/null)
-        if [[ -d "$it" ]]; then
-            sizestr="  <dir>"
-            name="${it:t}/"
-        else
-            sizestr=$(_ls_human_size "$size")
-            name="${it:t}"
-        fi
-        modes+=("$mode"); dates+=("$date"); sizes+=("$sizestr"); names+=("$name"); colors+=("$color")
+        if [[ -d "$it" ]]; then name="${it:t}/"; else name="${it:t}"; fi
+        names+=("$name"); colors+=("$color")
     done
 
     local -a colnamew
@@ -163,9 +151,7 @@ _ls_grid_list() {
         for (( c = 1; c <= ncols; c++ )); do
             idx=$(( (c - 1) * nrows + r ))
             (( idx > ${#items[@]} )) && continue
-            printf "%s %-7s %-12s %7s  %s%s%-*s%s" \
-                "$_LS_GRAY" "${modes[idx]}" "${dates[idx]}" "${sizes[idx]}" "$_LS_RESET" \
-                "${colors[idx]}" "${colnamew[c]}" "${names[idx]}" "$_LS_RESET"
+            printf "%s%-*s%s  " "${colors[idx]}" "${colnamew[c]}" "${names[idx]}" "$_LS_RESET"
         done
         echo
     done
