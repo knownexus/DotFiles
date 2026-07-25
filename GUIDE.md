@@ -22,15 +22,23 @@ These changed the shell's default behavior, not just added a command.
 | `CORRECT` | Misspelled command names get a "did you mean...?" suggestion |
 | `unsetopt BEEP` | No audible beep on tab-complete misses |
 | Completion caching | Cached under `~/.zsh_cache`, speeds up slow generators |
-| `menu select` | A second Tab press gives an arrow-key-navigable menu |
+| `menu select` + `Shift+Tab` | Arrow-key-navigable completion menu on demand |
 | `list-colors` | Completion menu color-codes entries like `ls` does |
 
 > **Directory stack:** with `AUTO_PUSHD` + `PUSHD_IGNORE_DUPS` +
 > `PUSHD_SILENT`, `cd -N` or `cd -<Tab>` hops back through the last 20
 > (`DIRSTACKSIZE=20`) directories you've visited.
 >
-> **Menu select** composes with the pre-existing `no_auto_menu`, which
-> still governs the *first* Tab press — nothing about that changed.
+> **Menu select needs `zsh/complist` loaded** to do anything at all —
+> that's what provides the `menu-select` widget and the arrow-key
+> bindings, and it was missing for a while (found via a real bug
+> report). It also needs its own key: `AUTO_MENU` — the option that
+> makes a *second* Tab press auto-enter the menu — has been off in this
+> config since long before any of this (`no_auto_menu`, "turn off
+> annoying vim style tab completion"), so repeated Tab was never going
+> to trigger it no matter what. Rather than override that long-standing
+> preference, **Shift+Tab** enters the menu on demand instead — plain
+> Tab's behavior is completely unchanged.
 
 ## Prompt
 
@@ -128,6 +136,7 @@ There are ~90 git aliases in total — run `gitaliases` for the full list.
 | `↑` / `↓` | Prefix-aware history search |
 | `End` / `Ctrl+E` | Accept the current inline hint (else: end-of-line) |
 | `Alt+H` | Jump to the man page for the command on the line |
+| `Shift+Tab` | Enter the arrow-key-navigable completion menu |
 | `Ctrl+R` / `Ctrl+T` / `Alt+C` *(fzf)* | Fuzzy history / file-insert / cd |
 
 > **↑/↓** only filter by what you've already typed — type `git` then

@@ -15,3 +15,11 @@ autoload -Uz run-help
 (( ${+aliases[run-help]} )) && unalias run-help
 autoload -Uz run-help-git run-help-svn run-help-sudo 2>/dev/null
 bindkey "^[h" run-help
+
+# Shift+Tab — enter the arrow-key-navigable completion menu on demand.
+# AUTO_MENU (unset via no_auto_menu in the main rc, "turn off annoying
+# vim style tab completion") means repeated plain Tab never auto-enters
+# the menu, so `zstyle ':completion:*' menu select` alone never actually
+# triggers — this gives the menu a key of its own instead of touching
+# that long-standing Tab behavior.
+bindkey "^[[Z" menu-complete
