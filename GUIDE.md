@@ -1,7 +1,7 @@
 # zsh config guide
 
 Everything added/changed in this config beyond the original setup. Read this
-with `view GUIDE.md` (syntax-highlighted, if `bat` is installed) or `less`.
+with `view GUIDE.md` (renders properly via `glow`, if installed) or `less`.
 For a live, in-shell version of the alias tables, run `cheat` any time.
 
 - [Shell behavior settings](#shell-behavior-settings)
@@ -59,7 +59,7 @@ These change behavior you might type from muscle memory — worth knowing about 
 | `aliases` / `gitaliases` / `allaliases` | Same cheatsheet, split by category if you only want one part. |
 | `zsh-doctor` | Reports which optional, tool-gated integrations (below) are actually active right now. |
 | `copy` | Pipes stdin to the system clipboard (`wl-copy`/`xclip`/`xsel`, whichever is found). |
-| `view <file>` | Syntax-highlighted, paged file viewer via `bat` (falls back to `less`). `cat` itself is untouched. |
+| `view <file>` | Read-only file viewer. Markdown renders properly (headers, bold, tables) via `glow`; everything else is syntax-highlighted via `bat`; falls back to `less` if neither is installed. `cat` itself is untouched. |
 | `repos-status [root]` | Scans `~/repos/*` (or a given root) and reports which repos have uncommitted changes and/or unpushed commits. |
 | `trash-restore <name> [name...]` | Brings something back out of `~/.trash`. Run with no args to list what's in there. |
 | `trash-empty` | Permanently clears `~/.trash` (confirms first). |
@@ -98,7 +98,8 @@ Several things in this config are inert until their underlying tool exists, then
 
 | Tool | What it enables |
 |---|---|
-| `bat` | Colorized man pages (`MANPAGER`), the `view` command |
+| `bat` | Colorized man pages (`MANPAGER`), non-markdown files in `view` |
+| `glow` | Rendered (not just highlighted) markdown in `view` |
 | `fzf` | Ctrl+R/Ctrl+T/Alt+C, `wt-gof`, `gitcf` |
 | `zoxide` | `z <partial-name>` — jump to a frecently-visited directory |
 | `direnv` | Per-project environment variables auto-loaded from a project's `.envrc` |

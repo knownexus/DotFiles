@@ -303,7 +303,8 @@ zsh-doctor() {
 
     local -a checks=(
         "dircolors:colorized ls / tab-completion menu"
-        "bat:colorized man pages, view"
+        "bat:colorized man pages, view (non-markdown)"
+        "glow:rendered markdown in view"
         "fzf:Ctrl+R / Ctrl+T, wt-gof, gitcf"
         "zoxide:z <partial-name>"
         "direnv:per-project .envrc auto-loading"
@@ -335,12 +336,22 @@ zsh-doctor() {
     echo ""
 }
 
-# view — read-only, syntax-highlighted file viewer via bat (falls back to
-# less if bat isn't installed). Opt-in name so plain `cat` behaviour and
-# any scripts relying on it are untouched.
-if (( ${+commands[bat]} )); then
-    view() { bat --paging=always "$@"; }
-else
-    view() { less "$@"; }
-fi
+# view — read-only file viewer. Markdown files render properly (headers,
+# bold, tables) via glow if it's installed; everything else is syntax-
+# highlighted via bat; falls back to less if neither is installed. Opt-in
+# name so plain `cat` behaviour and any scripts relying on it are untouched.
+view() {
+    if [[ $# -eq 0 ]]; then
+        echo "Usage: view <file> [file ...]" >&2
+        return 1
+    fi
+    if (( ${+commands[glow]} )) && [[ "$1" == *.md || "$1" == *.markdown ]]; then
+        local f
+        for f in "$@"; do glow -p "$f"; done
+    elif (( ${+commands[bat]} )); then
+        bat --paging=always "$@"
+    else
+        less "$@"
+    fi
+}
 
