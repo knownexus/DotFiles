@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>SignatureHintPredictor</AssemblyName>
+    <Nullable>enable</Nullable>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.2" />
+  </ItemGroup>
+</Project>
