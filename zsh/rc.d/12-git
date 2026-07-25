@@ -249,6 +249,7 @@ alias gitlg2='git log --oneline --graph --decorate --all --color=always'
 alias gs='git show'
 alias gits='git show'
 alias gitsn='git show --name-only'
+gsl() { git show --color=always "$@" | less -R; }
 
 # ---------------------------------------------------------------------------
 # Stash
@@ -285,6 +286,14 @@ pushdr() {
     local local_branch
     local_branch=$(git rev-parse --abbrev-ref HEAD)
     git push -u origin "${local_branch}:${remote}"
+}
+
+# Force-push local branch to a named remote branch
+pushdr-f() {
+    local remote="$1"
+    local local_branch
+    local_branch=$(git rev-parse --abbrev-ref HEAD)
+    git push -uf origin "${local_branch}:${remote}"
 }
 
 # ---------------------------------------------------------------------------
@@ -384,6 +393,20 @@ alias gup='git reset HEAD~1'
 alias gitrmc='git rm --cached'
 alias ignoreme='git update-index --assume-unchanged'
 alias dontignoreme='git update-index --no-assume-unchanged'
+
+# Local-only ignore via .git/info/exclude (never committed)
+localignore() {
+    if [[ $# -eq 0 ]]; then
+        echo "Usage: localignore <pattern> [pattern ...]" >&2
+        return 1
+    fi
+    local exclude
+    exclude="$(git rev-parse --git-common-dir)/info/exclude"
+    for pattern in "$@"; do
+        echo "$pattern" >> "$exclude"
+        echo "Added '$pattern' to .git/info/exclude"
+    done
+}
 
 # Clear screen + status
 rs() { reset; git status; }
@@ -531,6 +554,26 @@ wt-setup() {
         local repo_name="${clone_url##*/}"; repo_name="${repo_name%.git}"
         [[ -z "$name" ]] && name="$repo_name"
         local clone_target="$path/$name/.git-main"
+
+        # If workspace already has content (e.g. a previous full clone), move it into a
+        # named subdirectory so it becomes part of the worktree layout rather than noise.
+        local potential_workspace_dir="$path/$name"
+        if [[ -d "$potential_workspace_dir" ]]; then
+            local has_other_content
+            has_other_content=$(find "$potential_workspace_dir" -mindepth 1 -maxdepth 1 ! -name '.git-main' 2>/dev/null)
+            if [[ -n "$has_other_content" ]]; then
+                local existing_branch=""
+                if [[ -d "$potential_workspace_dir/.git" ]]; then
+                    existing_branch=$(git -C "$potential_workspace_dir" branch --show-current 2>/dev/null)
+                fi
+                [[ -z "$existing_branch" ]] && existing_branch="original"
+                local salvage_dir="$potential_workspace_dir/$existing_branch"
+                echo "  Existing content found — relocating to '$existing_branch/'..."
+                mkdir -p "$salvage_dir"
+                find "$potential_workspace_dir" -mindepth 1 -maxdepth 1 ! -name "$existing_branch" -exec mv {} "$salvage_dir/" \;
+            fi
+        fi
+
         echo "Cloning $clone_url → $clone_target"
         git clone --bare "$clone_url" "$clone_target"
         git -C "$clone_target" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
@@ -562,6 +605,443 @@ wt-setup() {
             git -C "$git_root" worktree add -b "$branch" "$wtpath"
         fi
     done
+}
+
+# Workspace — clone multiple repos each with their own worktrees
+# Usage: wt-workspace <path> <repo-url,...> <branch,...>
+wt-workspace() {
+    local path="$1" repos="$2" branches="$3"
+    "$HOME/.resources/zsh/scripts/new-git-workspace.sh" -p "$path" -r "$repos" -b "$branches"
+}
+
+# ---------------------------------------------------------------------------
+# Reverted changes — detect and clean up changes that were later reverted
+# ---------------------------------------------------------------------------
+
+# Emit "<file>\x1f<content>\t<line>" for + or - lines in a commit's diff
+# (excludes +++/--- file header lines). Content is trailing-whitespace trimmed.
+_grev_diff_pairs() {
+    local commit="$1" sign="$2"
+    local file="" oldl=0 newl=0
+    git show "$commit" | while IFS= read -r line; do
+        if [[ "$line" == '+++ b/'* ]]; then
+            file="${line#+++ b/}"; oldl=0; newl=0; continue
+        fi
+        if [[ "$line" == '@@'* ]]; then
+            oldl=$(grep -oP '(?<=-)\d+' <<< "$line" | head -1)
+            newl=$(grep -oP '(?<=\+)\d+' <<< "$line" | head -1)
+            continue
+        fi
+        [[ -z "$file" ]] && continue
+        (( ${#line} < 1 )) && continue
+        local c1="${line:0:1}" c2="${line:1:1}"
+        if [[ "$c1" == '+' && "$c2" != '+' ]]; then
+            if [[ "$sign" == '+' ]]; then
+                local content="${line:1}"; content="${content%"${content##*[![:space:]]}"}"
+                [[ -n "$content" ]] && printf '%s\x1f%s\t%s\n' "$file" "$content" "$newl"
+            fi
+            ((newl++))
+        elif [[ "$c1" == '-' && "$c2" != '-' ]]; then
+            if [[ "$sign" == '-' ]]; then
+                local content="${line:1}"; content="${content%"${content##*[![:space:]]}"}"
+                [[ -n "$content" ]] && printf '%s\x1f%s\t%s\n' "$file" "$content" "$oldl"
+            fi
+            ((oldl++))
+        else
+            ((oldl++)); ((newl++))
+        fi
+    done
+}
+
+# Find changes made in commit A that were undone in commit B (whole-diff content compare).
+# Usage: grev <commit-a> <commit-b>
+grev() {
+    local commitA="$1" commitB="$2"
+    if [[ -z "$commitA" || -z "$commitB" ]]; then
+        echo "Usage: grev <commit-a> <commit-b>" >&2
+        return 1
+    fi
+    local shaA shaB
+    shaA=$(git rev-parse --short "$commitA" 2>/dev/null)
+    shaB=$(git rev-parse --short "$commitB" 2>/dev/null)
+    if [[ -z "$shaA" ]]; then echo "Could not resolve commit: $commitA" >&2; return 1; fi
+    if [[ -z "$shaB" ]]; then echo "Could not resolve commit: $commitB" >&2; return 1; fi
+
+    local esc=$'\033' reset yellow red green gray
+    reset="${esc}[0m"; yellow="${esc}[33m"; red="${esc}[31m"; green="${esc}[32m"; gray="${esc}[90m"
+
+    echo ""
+    echo "${gray}A = $shaA  ($commitA)${reset}"
+    echo "${gray}B = $shaB  ($commitB)${reset}"
+    echo ""
+
+    local aAdded aRemoved bAdded bRemoved
+    aAdded=$(git show "$commitA" | grep -E '^\+[^+]' | cut -c2- | sed 's/[[:space:]]*$//' | grep -v '^$' | sort -u)
+    aRemoved=$(git show "$commitA" | grep -E '^-[^-]' | cut -c2- | sed 's/[[:space:]]*$//' | grep -v '^$' | sort -u)
+    bAdded=$(git show "$commitB" | grep -E '^\+[^+]' | cut -c2- | sed 's/[[:space:]]*$//' | grep -v '^$' | sort -u)
+    bRemoved=$(git show "$commitB" | grep -E '^-[^-]' | cut -c2- | sed 's/[[:space:]]*$//' | grep -v '^$' | sort -u)
+
+    local reverted readded found=0
+    reverted=$(comm -12 <(echo "$aAdded") <(echo "$bRemoved"))
+    readded=$(comm -12 <(echo "$aRemoved") <(echo "$bAdded"))
+
+    if [[ -n "$reverted" ]]; then
+        found=1
+        echo "${yellow}A added these lines — B then removed them:${reset}"
+        while IFS= read -r l; do echo "  ${red}- ${l}${reset}"; done <<< "$reverted"
+        echo ""
+    fi
+
+    if [[ -n "$readded" ]]; then
+        found=1
+        echo "${yellow}A removed these lines — B then re-added them:${reset}"
+        while IFS= read -r l; do echo "  ${green}+ ${l}${reset}"; done <<< "$readded"
+        echo ""
+    fi
+
+    if [[ "$found" -eq 0 ]]; then
+        echo "${gray}No changes from $shaA appear to be undone in $shaB.${reset}"
+    fi
+}
+
+# Rewrite commit A to remove changes that commit B later undid.
+# Usage: grev-clean <commitA> <commitB> [--dry-run]
+grev-clean() {
+    local commitA="$1" commitB="$2" dry_run=0
+    [[ "$3" == "--dry-run" || "$3" == "-n" ]] && dry_run=1
+    if [[ -z "$commitA" || -z "$commitB" ]]; then
+        echo "Usage: grev-clean <commitA> <commitB> [--dry-run]" >&2
+        return 1
+    fi
+
+    # All loop-scoped locals are declared once here (not re-declared inside
+    # loops) — zsh emits a stray "name=value" line to stdout when a bare
+    # `local` is re-declared across loop iterations.
+    local shaA shaB shortA shortB git_root
+    local esc reset yellow cyan red green gray
+    local key line_no f ans seq_editor prev_seq_editor rebase_ok
+    local full_path parent_raw pi cl cl_trim pl pl_trim
+    local prev_git_editor continue_exit final_exit cf l trimmed matched
+    local -a all_files lines kept restore_contents parent result conflicted to_auto unexpected
+
+    shaA=$(git rev-parse "$commitA" 2>/dev/null)
+    shaB=$(git rev-parse "$commitB" 2>/dev/null)
+    shortA=$(git rev-parse --short "$commitA" 2>/dev/null)
+    shortB=$(git rev-parse --short "$commitB" 2>/dev/null)
+    if [[ -z "$shaA" ]]; then echo "Cannot resolve: $commitA" >&2; return 1; fi
+    if [[ -z "$shaB" ]]; then echo "Cannot resolve: $commitB" >&2; return 1; fi
+
+    if [[ -n "$(git status --porcelain)" ]]; then
+        echo "Working tree is not clean. Stash or commit changes first." >&2
+        return 1
+    fi
+
+    git_root=$(git rev-parse --show-toplevel)
+
+    esc=$'\033'
+    reset="${esc}[0m"; yellow="${esc}[33m"; cyan="${esc}[36m"; red="${esc}[31m"; green="${esc}[32m"; gray="${esc}[90m"
+
+    typeset -A a_added a_removed b_added b_removed
+    while IFS=$'\t' read -r key line_no; do a_added[$key]=$line_no;   done < <(_grev_diff_pairs "$shaA" '+')
+    while IFS=$'\t' read -r key line_no; do a_removed[$key]=$line_no; done < <(_grev_diff_pairs "$shaA" '-')
+    while IFS=$'\t' read -r key line_no; do b_added[$key]=$line_no;   done < <(_grev_diff_pairs "$shaB" '+')
+    while IFS=$'\t' read -r key line_no; do b_removed[$key]=$line_no; done < <(_grev_diff_pairs "$shaB" '-')
+
+    typeset -A to_strip to_restore
+    for key in "${(@k)a_added}";   do [[ -n "${b_removed[$key]}" ]] && to_strip[$key]="${a_added[$key]}";     done
+    for key in "${(@k)a_removed}"; do [[ -n "${b_added[$key]}"   ]] && to_restore[$key]="${a_removed[$key]}"; done
+
+    if (( ${#to_strip} == 0 && ${#to_restore} == 0 )); then
+        echo "No redundant changes found between $shortA and $shortB."
+        return 0
+    fi
+
+    typeset -A files_set
+    for key in "${(@k)to_strip}" "${(@k)to_restore}"; do files_set[${key%%$'\x1f'*}]=1; done
+    all_files=("${(@k)files_set}")
+
+    echo ""
+    echo "${yellow}Changes to remove from $shortA :${reset}"
+    echo ""
+    for f in "${all_files[@]}"; do
+        echo "${cyan}  $f${reset}"
+        for key in "${(@k)to_strip}"; do
+            [[ "${key%%$'\x1f'*}" == "$f" ]] || continue
+            printf "    ${red}- L%-5s %s${reset}\n" "${to_strip[$key]}" "${key#*$'\x1f'}"
+        done
+        for key in "${(@k)to_restore}"; do
+            [[ "${key%%$'\x1f'*}" == "$f" ]] || continue
+            printf "    ${green}+ L%-5s %s${reset}\n" "${to_restore[$key]}" "${key#*$'\x1f'}"
+        done
+    done
+    echo ""
+
+    if (( dry_run )); then
+        echo "${gray}Dry run — no changes made.${reset}"
+        return 0
+    fi
+
+    printf "Rewrite commit %s to remove these changes? (y/n) " "$shortA"
+    read -r ans
+    if [[ "$ans" != "y" ]]; then echo "Aborted."; return 1; fi
+
+    seq_editor=$(mktemp)
+    cat > "$seq_editor" <<SCRIPT
+#!/bin/sh
+sed -i -E 's/^pick (${shaA:0:7}[0-9a-f]*)(.*)/edit \1\2/' "\$1"
+SCRIPT
+    chmod +x "$seq_editor"
+
+    prev_seq_editor="$GIT_SEQUENCE_EDITOR"
+    export GIT_SEQUENCE_EDITOR="$seq_editor"
+    rebase_ok=1
+    git rebase -i "${shaA}^" || rebase_ok=0
+    export GIT_SEQUENCE_EDITOR="$prev_seq_editor"
+    rm -f "$seq_editor"
+
+    if (( ! rebase_ok )); then
+        echo "Rebase failed — run 'git rebase --abort' to recover." >&2
+        return 1
+    fi
+
+    for f in "${all_files[@]}"; do
+        full_path="$git_root/$f"
+        if [[ ! -f "$full_path" ]]; then
+            echo "File not found in working tree: $f — skipping" >&2
+            continue
+        fi
+
+        lines=("${(@f)"$(<"$full_path")"}")
+
+        if (( ${#to_strip} )); then
+            kept=()
+            for l in "${lines[@]}"; do
+                trimmed="${l%"${l##*[![:space:]]}"}"
+                matched=0
+                for key in "${(@k)to_strip}"; do
+                    [[ "${key%%$'\x1f'*}" == "$f" ]] || continue
+                    [[ "$trimmed" == "${key#*$'\x1f'}" ]] && { matched=1; break }
+                done
+                (( matched )) || kept+=("$l")
+            done
+            lines=("${kept[@]}")
+        fi
+
+        if (( ${#to_restore} )); then
+            restore_contents=()
+            for key in "${(@k)to_restore}"; do
+                [[ "${key%%$'\x1f'*}" == "$f" ]] || continue
+                restore_contents+=("${key#*$'\x1f'}")
+            done
+            parent_raw=$(git show "HEAD^:$f" 2>/dev/null)
+            if [[ -n "$parent_raw" ]]; then
+                parent=("${(@f)parent_raw}")
+                result=()
+                pi=1
+                for cl in "${lines[@]}"; do
+                    cl_trim="${cl%"${cl##*[![:space:]]}"}"
+                    while (( pi <= ${#parent[@]} )); do
+                        pl="${parent[pi]}"
+                        pl_trim="${pl%"${pl##*[![:space:]]}"}"
+                        [[ "$pl_trim" == "$cl_trim" ]] && break
+                        (( ${restore_contents[(Ie)$pl_trim]} )) && result+=("$pl")
+                        ((pi++))
+                    done
+                    result+=("$cl")
+                    (( pi <= ${#parent[@]} )) && ((pi++))
+                done
+                while (( pi <= ${#parent[@]} )); do
+                    pl="${parent[pi]}"
+                    pl_trim="${pl%"${pl##*[![:space:]]}"}"
+                    (( ${restore_contents[(Ie)$pl_trim]} )) && result+=("$pl")
+                    ((pi++))
+                done
+                lines=("${result[@]}")
+            else
+                echo "Could not read parent state of $f — removals not restored" >&2
+            fi
+        fi
+
+        printf '%s\n' "${lines[@]}" > "$full_path"
+        git add "$f"
+    done
+
+    git commit --amend --no-edit
+    if (( $? != 0 )); then
+        echo "Amend failed — run 'git rebase --abort' to recover." >&2
+        return 1
+    fi
+
+    prev_git_editor="$GIT_EDITOR"
+    export GIT_EDITOR=true
+    git rebase --continue
+    continue_exit=$?
+    export GIT_EDITOR="$prev_git_editor"
+
+    if (( continue_exit != 0 )); then
+        conflicted=("${(@f)"$(git diff --name-only --diff-filter=U 2>/dev/null)"}")
+        conflicted=("${(@)conflicted:#}")   # drop the spurious empty element (@f) leaves when there's no output
+        to_auto=(); unexpected=()
+        for cf in "${conflicted[@]}"; do
+            if (( ${all_files[(Ie)$cf]} )); then to_auto+=("$cf"); else unexpected+=("$cf"); fi
+        done
+
+        if (( ${#unexpected[@]} )); then
+            echo ""
+            echo "Unexpected conflicts in: ${(j:, :)unexpected}. Resolve manually then run 'git rebase --continue'." >&2
+            return 1
+        fi
+        if (( ${#to_auto[@]} == 0 )); then
+            echo ""
+            echo "Rebase --continue failed with no detectable conflicts. Run 'git rebase --abort' to recover." >&2
+            return 1
+        fi
+
+        for cf in "${to_auto[@]}"; do
+            git checkout --theirs -- "$cf"
+            git add "$cf"
+        done
+
+        export GIT_EDITOR=true
+        git rebase --continue
+        final_exit=$?
+        export GIT_EDITOR="$prev_git_editor"
+
+        if (( final_exit != 0 )); then
+            echo ""
+            echo "Rebase still has conflicts after auto-resolution. Resolve manually then run 'git rebase --continue'." >&2
+            return 1
+        fi
+    fi
+
+    echo ""
+    echo "${green}Done — commit $shortA has been cleaned up.${reset}"
+}
+
+# Scan a commit range for changes that were later reverted in a non-adjacent commit.
+# Usage: grev-scan [<range>]
+grev-scan() {
+    local range="$1"
+    local base
+
+    # All loop-scoped locals are declared once here (not re-declared inside
+    # loops) — zsh emits a stray "name=value" line to stdout when a bare
+    # `local` is re-declared across loop iterations.
+    local min_len=10
+    local sha date subject key line_no content i n a b
+    local ei rest esign eline opposite ej rest2 esign2 gkey ftype
+    local esc reset yellow cyan red green gray
+    local orig_idx rev_idx rfile f rrest rcontent rtype rline rec
+    local -a shas dates subjects group_order events sorted_groups records file_order frecords
+
+    if [[ -z "$range" ]]; then
+        base=$(git merge-base HEAD develop 2>/dev/null)
+        if [[ -n "$base" ]]; then range="$base..HEAD"; else range="HEAD~20..HEAD"; fi
+    fi
+
+    echo "Scanning $range for redundant changes..." >&2
+
+    while IFS=$'\t' read -r sha date subject; do
+        shas+=("$sha"); dates+=("$date"); subjects+=("$subject")
+    done < <(git log --format='%H%x09%ad%x09%s' --date=short --reverse "$range" 2>/dev/null)
+
+    if (( ${#shas[@]} == 0 )); then
+        echo "No commits found in range '$range'." >&2
+        return 0
+    fi
+
+    typeset -A index  # key: file\x1fcontent -> " idx:sign:line idx:sign:line ..."
+
+    for (( i=1; i<=${#shas[@]}; i++ )); do
+        sha="${shas[i]}"
+        while IFS=$'\t' read -r key line_no; do
+            content="${key#*$'\x1f'}"
+            (( ${#content} >= min_len )) || continue
+            index[$key]+=" ${i}:+:${line_no}"
+        done < <(_grev_diff_pairs "$sha" '+')
+        while IFS=$'\t' read -r key line_no; do
+            content="${key#*$'\x1f'}"
+            (( ${#content} >= min_len )) || continue
+            index[$key]+=" ${i}:-:${line_no}"
+        done < <(_grev_diff_pairs "$sha" '-')
+    done
+
+    typeset -A groups  # key: origIdx|revIdx -> "\x01file\x1fcontent\x1ftype\x1fline ..."
+
+    for key in "${(@k)index}"; do
+        content="${key#*$'\x1f'}"
+        events=(${=index[$key]})
+        n=${#events[@]}
+        for (( a=1; a<=n; a++ )); do
+            ei="${events[a]%%:*}"; rest="${events[a]#*:}"
+            esign="${rest%%:*}"; eline="${rest#*:}"
+            [[ "$esign" == "+" ]] && opposite="-" || opposite="+"
+            for (( b=a+1; b<=n; b++ )); do
+                ej="${events[b]%%:*}"; rest2="${events[b]#*:}"
+                esign2="${rest2%%:*}"
+                if [[ "$esign2" == "$opposite" && "$ej" != "$ei" ]]; then
+                    gkey="${ei}|${ej}"
+                    [[ "$esign" == "+" ]] && ftype="AddedThenReverted" || ftype="RemovedThenRestored"
+                    [[ -z "${groups[$gkey]}" ]] && group_order+=("$gkey")
+                    groups[$gkey]+=$'\x01'"${key%%$'\x1f'*}"$'\x1f'"${content}"$'\x1f'"${ftype}"$'\x1f'"${eline}"
+                    break
+                fi
+            done
+        done
+    done
+
+    if (( ${#group_order[@]} == 0 )); then
+        echo "No redundant changes found in $range."
+        return 0
+    fi
+
+    sorted_groups=($(printf '%s\n' "${group_order[@]}" | sort -t'|' -k1,1n))
+
+    esc=$'\033'
+    reset="${esc}[0m"; yellow="${esc}[33m"; cyan="${esc}[36m"; red="${esc}[31m"; green="${esc}[32m"; gray="${esc}[90m"
+
+    echo ""
+    echo "${yellow}Redundant changes in $range :${reset}"
+
+    for gkey in "${sorted_groups[@]}"; do
+        orig_idx="${gkey%%|*}"; rev_idx="${gkey#*|}"
+        echo ""
+        echo "  Original : ${shas[orig_idx]:0:8}  ${dates[orig_idx]}  ${subjects[orig_idx]}"
+        echo "  Reverted : ${shas[rev_idx]:0:8}  ${dates[rev_idx]}  ${subjects[rev_idx]}"
+        echo ""
+
+        records=("${(@ps:\x01:)groups[$gkey]}")
+        records=("${records[@]:1}")
+
+        typeset -A by_file
+        file_order=()
+        for rec in "${records[@]}"; do
+            rfile="${rec%%$'\x1f'*}"
+            [[ -z "${by_file[$rfile]}" ]] && file_order+=("$rfile")
+            by_file[$rfile]+=$'\x01'"$rec"
+        done
+
+        for f in "${file_order[@]}"; do
+            echo "    ${cyan}$f${reset}"
+            frecords=("${(@ps:\x01:)by_file[$f]}")
+            frecords=("${frecords[@]:1}")
+            for rec in "${frecords[@]}"; do
+                rrest="${rec#*$'\x1f'}"
+                rcontent="${rrest%%$'\x1f'*}"
+                rrest="${rrest#*$'\x1f'}"
+                rtype="${rrest%%$'\x1f'*}"
+                rline="${rrest#*$'\x1f'}"
+                if [[ "$rtype" == "AddedThenReverted" ]]; then
+                    printf "      ${red}- L%-5s %s${reset}\n" "$rline" "$rcontent"
+                else
+                    printf "      ${green}+ L%-5s %s${reset}\n" "$rline" "$rcontent"
+                fi
+            done
+        done
+    done
+
+    echo ""
+    echo "${gray}Tip: grev-clean <original-sha> <revert-sha> to strip redundant changes from the original commit.${reset}"
 }
 
 # ---------------------------------------------------------------------------

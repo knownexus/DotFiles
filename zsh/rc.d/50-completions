@@ -73,6 +73,7 @@ compdef _local_branches gitb
 compdef _local_branches gri
 compdef _local_branches grim
 compdef _remote_branches pushdr
+compdef _remote_branches pushdr-f
 
 # ---------------------------------------------------------------------------
 # Worktree completions for wt-go, wt-done, wt-done-f
@@ -118,3 +119,4 @@ compdef _local_branches gitb
 compdef _local_branches gri
 compdef _local_branches grim
 compdef _remote_branches pushdr
+compdef _remote_branches pushdr-f
