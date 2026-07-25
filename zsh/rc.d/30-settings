@@ -43,3 +43,6 @@ setopt AUTO_CD
 ## Typo tolerance
 # Suggest a correction for a misspelled command name ("did you mean grev?")
 setopt CORRECT
+
+# No audible beep on tab-complete misses etc.
+unsetopt BEEP
