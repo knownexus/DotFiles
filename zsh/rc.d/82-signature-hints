@@ -1,0 +1,193 @@
+# -*- sh -*-
+#
+# Inline argument-placeholder hints for our own aliases/functions — the zsh
+# equivalent of pwsh's sig-predictor (PSReadLine ICommandPredictor). zsh has
+# no predictor API, but $POSTDISPLAY gives the same "ghost text after the
+# cursor" effect (it's the mechanism zsh-autosuggestions is built on), driven
+# here by a line-pre-redraw hook instead of a C# plugin.
+#
+# End accepts the current hint into the buffer, mirroring PSReadLine's
+# Right-arrow/End-to-accept behaviour.
+
+autoload -Uz add-zle-hook-widget
+
+typeset -gA _SIGHINT_SIGS
+_SIGHINT_SIGS=(
+    # File system
+    ls              "[path] [-R] [pattern]"
+    l               "[path] [-R] [pattern]"
+    ll              "[path] [-R] [pattern]"
+    la              "[path] [-R] [pattern]"
+    lla             "[path] [-R] [pattern]"
+    cd              "<path>"
+    mcd             "<path>"
+    tre             "[path]"
+    rm              "<path>"
+    rmr             "<path>"
+    md              "<path>"
+    touch           "<path>"
+    open            "<path>"
+    v               "<file>"
+    vb              ""
+    odx             "<file>"
+    odx1            "<file>"
+    remspace        "<path>"
+
+    # Search
+    g               "<pattern>"
+    g1              "<pattern>"
+    g2              "<pattern>"
+    rgs             "<pattern>"
+    rgs1            "<pattern>"
+    rgs2            "<pattern>"
+    fch             "<pattern>"
+    fchs            "<pattern>"
+    psgrep          "<name>"
+
+    # Shell utilities
+    fr              "<find> <replace> [path]"
+
+    # Git — status / info
+    gbl             "<file>"
+    gs              "[commit]"
+    gits            "[commit]"
+    gitsn           "[commit]"
+    gsl             "[commit]"
+    gl              "[options]"
+    gitl            "[options]"
+    gl2             "[options]"
+    gitl2           "[options]"
+    gitlg           "[options]"
+    gitlg2          "[options]"
+
+    # Git — staging / committing
+    ga              "<file>"
+    gita            "<file>"
+    gau             "<file>"
+    gitau           "<file>"
+    gaw1            "<include-pattern>"
+    gc              "[-m <message>]"
+    gitcm           "<message>"
+    gdf             "[commit|file]"
+
+    # Git — restore / reset / ignore
+    gres            "<file>"
+    gitres          "<file>"
+    gress           "<file>"
+    gitrmc          "<file>"
+    ignoreme        "<file>"
+    dontignoreme    "<file>"
+    localignore     "<pattern> [pattern ...]"
+    gar             "[repo-name]"
+    grh             "[commit]"
+
+    # Git — branch / checkout
+    gitb            "[branch]"
+    gitc            "<branch>"
+    gitcb           "<branch>"
+
+    # Git — stash
+    gst             "[message]"
+    stash           "[message]"
+
+    # Git — cherry-pick
+    gitcp           "<commit>"
+
+    # Git — push / remote
+    pushdr          "<remote-branch>"
+    pushdr-f        "<remote-branch>"
+
+    # Git — rebase
+    gri             "[target|HEAD~N]"
+    grim            "[target|HEAD~N]"
+    rebaseon        "<branch-fragment>"
+    grof            "<branch>"
+
+    # Git — reverted changes
+    grev            "<commitA> <commitB>"
+    grev-clean      "<commitA> <commitB> [--dry-run]"
+    grev-scan       "[range]"
+
+    # Git — worktree
+    wt-go           "<name>"
+    wt-done         "<name>"
+    wt-done-f       "<name>"
+    wt-feature      "<ticket-id> <desc> [base]"
+    wt-fix          "<ticket-id> <desc> [base]"
+    wt-c            "<branch>"
+    wt-setup        "-b <branch,...> [-n name] [-u clone-url] [-p path]"
+    wt-workspace    "<path> <repo-url,...> <branch,...>"
+    fix-fetch-refspecs "[root]"
+)
+
+# Every known alias/function — including no-arg ones — so prefix matching
+# works for all of them (mirrors AllCommands in the pwsh predictor).
+typeset -ga _SIGHINT_ALL_COMMANDS
+_SIGHINT_ALL_COMMANDS=(
+    ls l ll la lla cd mcd tre rm rmr md touch open v vb odx odx1 remspace
+    cdh rp rpp rpz rpsource rpa rpam rpn rpnm rpc rpm rpnc sb bye c
+    g g1 g2 rgs rgs1 rgs2 fch fchs psgrep path brk fr
+    dbuild
+    gstat g! git! gbl gs gits gitsn gsl gl gitl gl2 gitl2 gitlg gitlg2 rs
+    ga gita gau gitau gaw gaw1 gc gca gitca gitcm uncommit gdf gdfs gdf1
+    gres gitres gress grh gup gitrmc ignoreme dontignoreme localignore gar
+    gitb gitc gitcb gitcd
+    gst gp gstl stash stashp
+    gitcp gclean
+    gitf gitpl update updated
+    gpf gitfp gitpf gp1 pushdr pushdr-f
+    gru grpo giturl gitremote-reset remote!
+    gri grim grd grm gro groi grod grof rebaseon gitra gitrc groot
+    grev grev-clean grev-scan
+    wt-go wt-list wt-feature wt-fix wt-c wt-done wt-done-f wt! wt-prune wt-setup wt-workspace fix-fetch-refspecs
+)
+
+_sighint_update() {
+    POSTDISPLAY=""
+    [[ -z "$BUFFER" ]] && return
+
+    local -a parts
+    parts=(${(z)BUFFER})
+    (( ${#parts[@]} == 0 )) && return
+    local cmd="${parts[1]}"
+
+    if (( ${+_SIGHINT_SIGS[$cmd]} )); then
+        local sig="${_SIGHINT_SIGS[$cmd]}"
+        local -a sigparts
+        sigparts=(${=sig})
+        local provided=$(( ${#parts[@]} - 1 ))
+        (( provided >= ${#sigparts[@]} )) && return
+        local sep=" "
+        [[ "$BUFFER" == *[[:space:]] ]] && sep=""
+        POSTDISPLAY="${sep}${(j: :)sigparts[$((provided+1)),-1]}"
+        return
+    fi
+
+    # Partial prefix — single word typed, no space yet — suggest the first match.
+    if (( ${#parts[@]} == 1 )) && [[ "$BUFFER" != *[[:space:]]* ]] && (( ${#cmd} >= 2 )); then
+        local known
+        for known in "${_SIGHINT_ALL_COMMANDS[@]}"; do
+            [[ "$known" == "${cmd}"* && "$known" != "$cmd" ]] || continue
+            local rest="${known#$cmd}"
+            local knownsig="${_SIGHINT_SIGS[$known]}"
+            POSTDISPLAY="${rest}${knownsig:+ $knownsig}"
+            return
+        done
+    fi
+}
+
+add-zle-hook-widget line-pre-redraw _sighint_update
+
+# Accept the current hint into the buffer (End mirrors PSReadLine's accept key).
+_sighint_accept() {
+    if [[ -n "$POSTDISPLAY" ]]; then
+        BUFFER+="$POSTDISPLAY"
+        CURSOR=${#BUFFER}
+        POSTDISPLAY=""
+    else
+        zle end-of-line
+    fi
+}
+zle -N _sighint_accept
+bindkey "^[[F" _sighint_accept   # End
+bindkey "^E"   _sighint_accept   # Ctrl+E (common End alternative)
