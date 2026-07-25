@@ -142,7 +142,7 @@ _SIGHINT_ALL_COMMANDS=(
     wt-go wt-list wt-feature wt-fix wt-c wt-done wt-done-f wt! wt-prune wt-setup wt-workspace fix-fetch-refspecs
 )
 
-_sighint_update() {
+_sighint_compute() {
     POSTDISPLAY=""
     [[ "$KEYMAP" == "isearch" ]] && return   # don't hint over an incremental search
     [[ -z "$BUFFER" ]] && return
@@ -174,6 +174,25 @@ _sighint_update() {
             POSTDISPLAY="${rest}${knownsig:+ $knownsig}"
             return
         done
+    fi
+}
+
+# region_highlight is shared with zsh-syntax-highlighting, which rebuilds it
+# (region_highlight=()) inside the widgets it wraps — i.e. *before* this
+# line-pre-redraw hook runs, not after. So it's safe to append our own dim
+# entry here each redraw; we just track how many we added so we can trim
+# only those, not syntax-highlighting's, before adding fresh ones.
+typeset -g _SIGHINT_HL_COUNT=0
+
+_sighint_update() {
+    (( _SIGHINT_HL_COUNT > 0 )) && region_highlight[-${_SIGHINT_HL_COUNT},-1]=()
+    _SIGHINT_HL_COUNT=0
+
+    _sighint_compute
+
+    if [[ -n "$POSTDISPLAY" ]]; then
+        region_highlight+=("$#BUFFER $(( $#BUFFER + $#POSTDISPLAY )) fg=8")
+        _SIGHINT_HL_COUNT=1
     fi
 }
 
