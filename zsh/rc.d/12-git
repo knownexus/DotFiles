@@ -536,22 +536,52 @@ wt-list() {
     git --git-dir="$gitdir" worktree list
 }
 
+# Resolves the branch wt-feature/wt-fix should branch from when no base is
+# given explicitly: this repo's configured default (wt.default-base, set via
+# wt-default-base below), falling back to 'develop' if never configured.
+_wt_default_base() {
+    local gitdir="$1" configured
+    configured=$(git --git-dir="$gitdir" config --get wt.default-base 2>/dev/null)
+    echo "${configured:-develop}"
+}
+
+# Get or set this repo's default base branch for wt-feature/wt-fix (stored
+# as git config wt.default-base, so it lives with the repo and is shared
+# across all its worktrees). Run with no argument to see the current value.
+wt-default-base() {
+    local branch="$1" gitdir configured
+    gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
+    if [[ -n "$branch" ]]; then
+        git --git-dir="$gitdir" config wt.default-base "$branch"
+        echo "wt-feature/wt-fix will now default to '$branch' in this repo"
+    else
+        configured=$(git --git-dir="$gitdir" config --get wt.default-base 2>/dev/null)
+        if [[ -n "$configured" ]]; then
+            echo "Default base branch: $configured"
+        else
+            echo "Default base branch: develop (built-in default, never configured)"
+        fi
+    fi
+}
+
 # Create a feature/ worktree + branch
 wt-feature() {
-    local ticket="$1" desc="$2" base="${3:-develop}"
+    local ticket="$1" desc="$2" base="$3"
     local root wtpath gitdir
     root=$(_wt_project_root)
     gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
+    base="${base:-$(_wt_default_base "$gitdir")}"
     wtpath="$root/feature/$ticket-$desc"
     git --git-dir="$gitdir" worktree add "$wtpath" -b "feature/$ticket-$desc" "$base"
 }
 
 # Create a fix/ worktree + branch
 wt-fix() {
-    local ticket="$1" desc="$2" base="${3:-develop}"
+    local ticket="$1" desc="$2" base="$3"
     local root wtpath gitdir
     root=$(_wt_project_root)
     gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
+    base="${base:-$(_wt_default_base "$gitdir")}"
     wtpath="$root/fix/$ticket-$desc"
     git --git-dir="$gitdir" worktree add "$wtpath" -b "fix/$ticket-$desc" "$base"
 }

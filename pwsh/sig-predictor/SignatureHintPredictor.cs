@@ -56,7 +56,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "rs", "update", "updated",
         // Git — worktree
         "wt-go", "wt-gof", "wt-list", "wt-feature", "wt-fix", "wt-c", "gitcf",
-        "wt-done", "wt-done-f", "wt!", "wt-prune", "wt-setup", "wt-workspace", "fix-fetch-refspecs",
+        "wt-done", "wt-done-f", "wt!", "wt-prune", "wt-setup", "wt-workspace", "wt-default-base", "fix-fetch-refspecs",
     };
 
     private static string[]? GetSig(string cmd) => cmd switch
@@ -154,6 +154,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "wt-c"                      => new[] { "<branch>" },
         "wt-setup"                  => new[] { "<branches>", "[-Name <n>]", "[-CloneUrl <url>]" },
         "wt-workspace"              => new[] { "-Path", "<path>", "-Repos", "<url,...>", "-Branches", "<branch,...>" },
+        "wt-default-base"           => new[] { "[branch]" },
         "fix-fetch-refspecs"        => new[] { "[root]" },
         // wt-gof, gitcf, copy, cheat, doctor take no arguments — no entry needed
 

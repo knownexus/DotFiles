@@ -76,15 +76,41 @@ function global:wt-list {
     git --git-dir=$gitDir worktree list
 }
 
+# Resolves the branch wt-feature/wt-fix should branch from when -Base isn't
+# given explicitly: this repo's configured default (wt.default-base, set via
+# wt-default-base below), falling back to 'develop' if never configured.
+function script:Resolve-WtDefaultBase {
+    param([string]$GitDir)
+    $configured = git --git-dir=$GitDir config --get wt.default-base 2>$null
+    if ($configured) { return $configured }
+    return 'develop'
+}
+
+# Get or set this repo's default base branch for wt-feature/wt-fix (stored
+# as git config wt.default-base, so it lives with the repo and is shared
+# across all its worktrees). Run with no argument to see the current value.
+function global:wt-default-base {
+    param([string]$Branch)
+    $gitDir = Get-WorktreeGitDir
+    if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
+    if ($Branch) {
+        git --git-dir=$gitDir config wt.default-base $Branch
+        Write-Host "wt-feature/wt-fix will now default to '$Branch' in this repo"
+    } else {
+        Write-Host "Default base branch: $(Resolve-WtDefaultBase $gitDir) $(if (-not (git --git-dir=$gitDir config --get wt.default-base 2>$null)) { '(built-in default, never configured)' })"
+    }
+}
+
 # Create a feature worktree at <project-root>\feature\<TicketId>-<Desc>
 function global:wt-feature {
     param(
         [Parameter(Mandatory)][string]$TicketId,
         [Parameter(Mandatory)][string]$Desc,
-        [string]$Base = 'develop'
+        [string]$Base
     )
     $gitDir = Get-WorktreeGitDir
     if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
+    if (-not $Base) { $Base = Resolve-WtDefaultBase $gitDir }
     $Desc   = $Desc -replace ' ', '_'
     $root   = Get-GitWorktreeRoot
     $wtPath = Join-Path $root "feature\$TicketId-$Desc"
@@ -96,10 +122,11 @@ function global:wt-fix {
     param(
         [Parameter(Mandatory)][string]$TicketId,
         [Parameter(Mandatory)][string]$Desc,
-        [string]$Base = 'develop'
+        [string]$Base
     )
     $gitDir = Get-WorktreeGitDir
     if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
+    if (-not $Base) { $Base = Resolve-WtDefaultBase $gitDir }
     $Desc   = $Desc -replace ' ', '_'
     $root   = Get-GitWorktreeRoot
     $wtPath = Join-Path $root "fix\$TicketId-$Desc"
