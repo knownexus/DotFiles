@@ -58,26 +58,45 @@ function script:Get-ShortPath {
 function script:Get-VcsInfo {
     # Returns a hashtable with Branch, Revno, Flags — or $null outside a repo.
 
-    # Git
-    $gitRoot = git rev-parse --show-toplevel 2>$null
-    if ($LASTEXITCODE -eq 0 -and $gitRoot) {
-        $branch = git symbolic-ref --short HEAD 2>$null
-        if (-not $branch) { $branch = git rev-parse --short HEAD 2>$null }
-        $revno  = git rev-parse --short=7 HEAD 2>$null
+    # Git — a single `git status --porcelain=v2 --branch` yields branch, revno,
+    # and file-status flags together, and one `git rev-parse` call gives repo
+    # location + worktree detection, down from the 4-5 separate git spawns
+    # this used to make on every prompt render.
+    $repoInfo = git rev-parse --git-dir --git-common-dir 2>$null
+    if ($LASTEXITCODE -eq 0 -and $repoInfo) {
+        $gitDir, $commonGitDir = $repoInfo
+        $isWorktree = $gitDir -ne $commonGitDir
 
-        # A worktree has a .git FILE; the main checkout has a .git DIRECTORY.
-        $gitDotGit  = Join-Path $gitRoot '.git'
-        $isWorktree = Test-Path $gitDotGit -PathType Leaf
+        $branch = ''
+        $revno  = ''
+        $hasUntracked = $false
+        $hasA = $false; $hasD = $false; $hasR = $false; $hasM = $false
+
+        $status = git status --porcelain=v2 --branch 2>$null
+        foreach ($line in $status) {
+            if ($line -match '^# branch\.oid (\S+)') {
+                $revno = $Matches[1].Substring(0, [Math]::Min(7, $Matches[1].Length))
+            }
+            elseif ($line -match '^# branch\.head (\S+)') {
+                if ($Matches[1] -ne '(detached)') { $branch = $Matches[1] }
+            }
+            elseif ($line -match '^\?') { $hasUntracked = $true }
+            elseif ($line -match '^[12u] (\S\S) ') {
+                $xy = $Matches[1]
+                if ($xy.Contains('A')) { $hasA = $true }
+                if ($xy.Contains('D')) { $hasD = $true }
+                if ($xy.Contains('R')) { $hasR = $true }
+                if ($xy.Contains('M')) { $hasM = $true }
+            }
+        }
+        if (-not $branch) { $branch = $revno }
 
         $flags = ''
-        $porcelain = git status --porcelain 2>$null
-        if ($porcelain) {
-            if ($porcelain -match '^\?\?')          { $flags += '?' }
-            if ($porcelain -match '^[A][^A]|^.A')   { $flags += 'A' }
-            if ($porcelain -match '^[D]|^.[D]')     { $flags += 'D' }
-            if ($porcelain -match '^[R]|^.[R]')     { $flags += 'R' }
-            if ($porcelain -match '^[M]|^.[M]')     { $flags += 'M' }
-        }
+        if ($hasUntracked) { $flags += '?' }
+        if ($hasA) { $flags += 'A' }
+        if ($hasD) { $flags += 'D' }
+        if ($hasR) { $flags += 'R' }
+        if ($hasM) { $flags += 'M' }
 
         return @{ VCS = 'git'; Branch = $branch; Revno = $revno; Flags = $flags; IsWorktree = $isWorktree }
     }

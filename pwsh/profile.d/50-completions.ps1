@@ -1,7 +1,8 @@
 ﻿# Tab completion -- mirrors zsh 50-completions
 
-if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
-    Import-Module PSReadLine -ErrorAction SilentlyContinue
+# PSReadLine is already imported by 30-settings.ps1 — check the loaded-module
+# list (fast) rather than re-scanning disk with -ListAvailable.
+if (Get-Module -Name PSReadLine) {
 
     # Menu-style completion (mirrors zsh list-suffixes / group completion)
     Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
@@ -19,11 +20,11 @@ if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
 
     # ---------------------------------------------------------------------------
     # Inline signature predictor — requires PowerShell 7.2+ and PSReadLine 2.2+.
-    # Built from C:\repos\pwsh\sig-predictor\ — run once to compile:
-    #   dotnet build C:\repos\pwsh\sig-predictor
+    # Built from <this repo>\pwsh\sig-predictor\ — run once to compile:
+    #   dotnet build <this repo>\pwsh\sig-predictor
     # ---------------------------------------------------------------------------
     if ($PSVersionTable.PSVersion -ge [version]'7.2' -and $rlVersion -ge [version]'2.2') {
-        $sigDll = 'C:\repos\pwsh\sig-predictor\bin\Release\net10.0\SignatureHintPredictor.dll'
+        $sigDll = Join-Path $script:RESDIR 'sig-predictor\bin\Release\net10.0\SignatureHintPredictor.dll'
         if ((Test-Path $sigDll) -and
             -not ([System.Management.Automation.PSTypeName]'SignatureHintPredictor').Type) {
             try {
@@ -50,7 +51,7 @@ if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
 
 # Rebuild the signature predictor and reload the profile to pick up changes
 function global:build-predictor {
-    dotnet build 'C:\repos\pwsh\sig-predictor' -c Release --nologo -v q
+    dotnet build (Join-Path $script:RESDIR 'sig-predictor') -c Release --nologo -v q
     if ($LASTEXITCODE -eq 0) {
         Write-Host 'Build succeeded — reloading profile...' -ForegroundColor Green
         . $PROFILE
@@ -60,9 +61,15 @@ function global:build-predictor {
     }
 }
 
-# Load posh-git for rich git tab completion if available
+# posh-git gives rich `git <TAB>` completion but costs ~200ms+ to import, so
+# defer it until the first git completion attempt instead of every launch.
+# Importing it registers its own native completer for `git`, which replaces
+# this stub — so results only appear from the second Tab press onward.
 if (Get-Module -ListAvailable -Name posh-git -ErrorAction SilentlyContinue) {
-    Import-Module posh-git
+    Register-ArgumentCompleter -CommandName git -Native -ScriptBlock {
+        param($wordToComplete, $commandAst, $cursorPosition)
+        Import-Module posh-git
+    }
 }
 
 # Worktree name completion for wt-go, wt-done, wt-done-f

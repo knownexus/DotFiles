@@ -1,7 +1,8 @@
 # Key bindings — mirrors zsh 81-key-bindings
 
-if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
-    Import-Module PSReadLine -ErrorAction SilentlyContinue
+# PSReadLine is already imported by 30-settings.ps1 — check the loaded-module
+# list (fast) rather than re-scanning disk with -ListAvailable.
+if (Get-Module -Name PSReadLine) {
 
     # Ctrl+Right / Ctrl+Left word navigation (mirrors ^[[1;5C / ^[[1;5D)
     Set-PSReadLineKeyHandler -Chord Ctrl+RightArrow -Function ForwardWord
