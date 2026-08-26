@@ -4,6 +4,12 @@ if (-not $env:COMPUTERNAME)  { $env:COMPUTERNAME = hostname }
 if (-not $env:VISUAL)        { $env:VISUAL = 'vim' }
 if (-not $env:EDITOR)        { $env:EDITOR = $env:VISUAL }
 
+# $HOME is a PowerShell automatic variable, not an OS environment variable --
+# it never propagates to child processes on its own. Tools that shell out
+# and read the real env block (direnv's config-dir lookup, notably) need
+# $env:HOME set explicitly, unlike POSIX shells which always export it.
+if (-not $env:HOME)          { $env:HOME = $env:USERPROFILE }
+
 # ---------------------------------------------------------------------------
 # Repo root alias — displayed in the prompt instead of the full path.
 #

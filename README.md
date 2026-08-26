@@ -27,16 +27,19 @@ out of sync between hand-maintained copies: the git-aliases cheatsheet table.
 Pick the one that matches this machine:
 
 ```sh
-./bootstrap.sh          # Linux/Mac — symlinks ~/.resources, wires ~/.zshrc, checks for yq
+./bootstrap.sh          # Linux/Mac — symlinks ~/.resources, wires ~/.zshrc, installs all dependencies
 ```
 
 ```powershell
-.\bootstrap.ps1         # Windows — wires $PROFILE, checks for yq
+.\bootstrap.ps1         # Windows — wires $PROFILE, installs all dependencies
 ```
 
-Both are safe to re-run. Requires `yq` (mikefarah/yq — same binary, same
-query language, on both platforms); the bootstrap script installs it if
-missing.
+Both are safe to re-run, and both install everything the config uses —
+required (`git`, `yq` — mikefarah/yq, same binary and query language on both
+platforms) and optional (`vim`, `less`, `ripgrep`, `fzf`, `bat`, `glow`,
+`zoxide`, `direnv`, and more) — via each platform's package manager
+(dnf/apt/brew on Linux/Mac, winget on Windows), so nothing has to be
+installed by hand afterward.
 
 ## Why one repo
 
