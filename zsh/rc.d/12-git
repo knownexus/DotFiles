@@ -777,7 +777,7 @@ wt-workspace() {
     # tied to $PATH; shadowing it empties PATH for this scope and breaks
     # every external command (see wt-setup's bug history above).
     local workspace_path="$1" repos="$2" branches="$3"
-    "$HOME/.resources/zsh/scripts/new-git-workspace.sh" -p "$workspace_path" -r "$repos" -b "$branches"
+    "$HOME/.resources/scripts/new-git-workspace.sh" -p "$workspace_path" -r "$repos" -b "$branches"
 }
 
 # ---------------------------------------------------------------------------

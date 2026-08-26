@@ -12,9 +12,9 @@ $gitVim = "C:\Program Files\Git\usr\bin"
 )
 
 # Copy vim dotfiles
-cp C:\repos\pwsh\configs\.vimrc ~/.vimrc
-cp C:\repos\pwsh\configs\.vim ~/.vim/
-cp C:\repos\pwsh\configs\cheatsheet.txt ~/.vim/cheatsheet.txt
+cp $PSScriptRoot\configs\.vimrc ~/.vimrc
+cp $PSScriptRoot\configs\.vim ~/.vim/
+cp $PSScriptRoot\configs\cheatsheet.txt ~/.vim/cheatsheet.txt
 
 # Install Claude Code
 irm https://claude.ai/install.ps1 | iex

@@ -94,7 +94,7 @@ function global:rpam { Set-Location 'C:\repos\DriveFurtherAPI\master' }
 function global:rpn { Set-Location 'C:\repos\DriveFurtherNucleus\develop' }
 function global:rpnm { Set-Location 'C:\repos\DriveFurtherNucleus\master' }
 function global:rpc { Set-Location 'C:\repos\CirrusAutomatedTests' }
-function global:rpp { Set-Location 'C:\repos\pwsh' }
+function global:rpp { Set-Location $script:RESDIR }
 function global:rpm { Set-Location 'C:\repos\ManagementDashboard' }
 function global:rpnc { Set-Location 'C:\repos\NexusCommunity' }
 
@@ -106,7 +106,7 @@ function global:v {
 
 function global:vb {
     $editor = if ($env:VISUAL) { $env:VISUAL } elseif ($env:EDITOR) { $env:EDITOR } else { 'vim' }
-    & $editor 'C:\repos\pwsh\profile.d'
+    & $editor (Join-Path $script:RESDIR 'profile.d')
 }
 
 # Reload profile (mirrors source ~/.zshrc / sb on Linux)
@@ -236,4 +236,4 @@ function global:brk {
 }
 
 # Explorer
-function global:merge-explorer { & 'C:\repos\pwsh\scripts\consolidate-explorer.ps1' }
+function global:merge-explorer { & (Join-Path $script:RESDIR 'scripts\consolidate-explorer.ps1') }

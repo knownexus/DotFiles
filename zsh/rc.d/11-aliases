@@ -137,18 +137,18 @@ trash-empty() {
 alias cdh='cd ~'
 alias rp='cd ~/repos'
 alias rps='cd ~/repos/ShatteredRealms'
-alias rpsource='cd ~/.resources/zsh'
+alias rpsource='cd ~/.resources'
 
 # ------------------------------
 # Vim shortcuts
 # ------------------------------
 alias v='vim'
-alias vb='vim ~/.resources/zsh/rc.d'
+alias vb='vim ~/.resources/rc.d'
 
 # ------------------------------
 # Reload Zsh config
 # ------------------------------
-alias sb='source ~/.resources/zsh/rc'
+alias sb='source ~/.resources/rc'
 
 TREE_EXCLUDE='obj|.git|node_modules|logs|Migrations|dist|dist_electron|bin'
 alias tre='tree -I "$TREE_EXCLUDE" .'
@@ -167,8 +167,8 @@ alias cdh='cd ~'
 # ------------------------------
 # Repo shortcuts  (mirrors pwsh rp* aliases, Linux paths)
 # ------------------------------
-alias rpp='cd ~/repos/pwsh'
-alias rpz='cd ~/repos/zsh'
+alias rpp='cd ${RESDIR:A:h}/pwsh'
+alias rpz='cd $RESDIR'
 alias rpa='cd ~/repos/DriveFurtherAPI/develop'
 alias rpam='cd ~/repos/DriveFurtherAPI/master'
 alias rpn='cd ~/repos/DriveFurtherNucleus/develop'

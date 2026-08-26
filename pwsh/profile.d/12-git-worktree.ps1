@@ -307,5 +307,5 @@ function global:wt-workspace {
         [Parameter(Mandatory)][string[]] $Repos,
         [Parameter(Mandatory)][string[]] $Branches
     )
-    & 'C:\repos\pwsh\scripts\New-GitWorkspace.ps1' -Path $Path -Repos $Repos -Branches $Branches
+    & (Join-Path $script:RESDIR 'scripts\New-GitWorkspace.ps1') -Path $Path -Repos $Repos -Branches $Branches
 }

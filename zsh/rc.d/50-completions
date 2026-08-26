@@ -34,7 +34,7 @@ zstyle ':completion:*' preserve-prefix '//[^/]##/'
 zstyle ':completion:*' squeeze-slashes true
 zstyle ':completion:*' use-compctl false
 zstyle ':completion:*' verbose true
-zstyle :compinstall filename "${HOME}/.resources/zsh/rc.d/50-completions"
+zstyle :compinstall filename "${HOME}/.resources/rc.d/50-completions"
 
 autoload -Uz compinit
 compinit -u

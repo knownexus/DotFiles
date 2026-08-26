@@ -94,9 +94,9 @@ function global:Show-ProfileAliases {
 }
 
 function global:aliases {
-    Show-ProfileAliases 'C:\repos\pwsh\profile.d\10-ls.ps1'       'ls aliases'
-    Show-ProfileAliases 'C:\repos\pwsh\profile.d\11-aliases.ps1'   'General aliases'
-    Show-ProfileAliases 'C:\repos\pwsh\profile.d\80-functions.ps1' 'Functions'
+    Show-ProfileAliases (Join-Path $script:RESDIR 'profile.d\10-ls.ps1')       'ls aliases'
+    Show-ProfileAliases (Join-Path $script:RESDIR 'profile.d\11-aliases.ps1')   'General aliases'
+    Show-ProfileAliases (Join-Path $script:RESDIR 'profile.d\80-functions.ps1') 'Functions'
     Write-Host ""
 }
 

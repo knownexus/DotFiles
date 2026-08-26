@@ -7,7 +7,7 @@ function global:grev {
         [Parameter(Mandatory, Position = 0)][string]$CommitA,
         [Parameter(Mandatory, Position = 1)][string]$CommitB
     )
-    & 'C:\repos\pwsh\scripts\Find-RevertedChanges.ps1' $CommitA $CommitB
+    & (Join-Path $script:RESDIR 'scripts\Find-RevertedChanges.ps1') $CommitA $CommitB
 }
 
 # Rewrite commit A to remove changes that commit B later undid.
