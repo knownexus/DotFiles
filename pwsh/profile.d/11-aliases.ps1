@@ -16,8 +16,16 @@ function global:Invoke-Search {
     grep -rn --color=always $excludeArgs $Pattern $Path
 }
 
-Remove-Item Alias:r  -Force -ErrorAction SilentlyContinue
-Set-Alias -Name r -Value Clear-Host -Force -Option AllScope
+# Full terminal reset — mirrors zsh's r='reset'. Clear-Host only clears the
+# visible screen; it does nothing about terminal state left corrupted by,
+# e.g., cat-ing a binary file (garbled colors, stuck echo mode, wrong
+# scroll region). ESC c is the VT "Full Reset" (RIS) sequence, which
+# reinitializes the terminal driver the same way Unix's `reset` does --
+# supported by Windows Terminal's VT parser.
+Remove-Item Alias:r -Force -ErrorAction SilentlyContinue
+function global:r {
+    [Console]::Out.Write("$([char]27)c")
+}
 
 # g  — search with full exclusion list
 function global:g  { Invoke-Search @args }
