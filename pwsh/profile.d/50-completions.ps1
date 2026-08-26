@@ -15,7 +15,21 @@ if (Get-Module -Name PSReadLine) {
     $rlVersion = (Get-Module PSReadLine).Version
     if ($rlVersion -ge [version]'2.1') {
         Set-PSReadLineOption -PredictionSource History
-        Set-PSReadLineOption -PredictionViewStyle InlineView
+        if ($rlVersion -ge [version]'2.2') {
+            # ListView groups suggestions by source under a labelled header
+            # (History first, then each plugin, e.g. SignatureHints) -- live,
+            # in-terminal, non-modal, exactly like InlineView but showing all
+            # candidates instead of just one. Its per-row rendering can't
+            # preserve a plugin-embedded custom color per item (tried and
+            # confirmed: ListView's highlighting pass overwrites it), so
+            # suggestions render in PSReadLine's normal ListPrediction color
+            # -- distinguishable by section header, not by color. Requires
+            # 2.2+, same as the plugin predictor below; older PSReadLine
+            # falls back to InlineView.
+            Set-PSReadLineOption -PredictionViewStyle ListView
+        } else {
+            Set-PSReadLineOption -PredictionViewStyle InlineView
+        }
     }
 
     # ---------------------------------------------------------------------------
@@ -41,6 +55,40 @@ if (Get-Module -Name PSReadLine) {
                     [SignatureHintPredictor]::new()
                 )
                 Set-PSReadLineOption -PredictionSource HistoryAndPlugin
+
+                # Cycle History-only -> SignatureHints-only -> both (Ctrl+Spacebar)
+                # -- useful when the two sources' suggestions for the same
+                # prefix crowd each other out in the list.
+                function global:Switch-PredictionSource {
+                    $current = (Get-PSReadLineOption).PredictionSource
+                    if ($current -eq [Microsoft.PowerShell.PredictionSource]::History) {
+                        Set-PSReadLineOption -PredictionSource Plugin
+                        # Window title, not Write-Host -- printing a line (even
+                        # with a leading `n to move to a fresh one) permanently
+                        # pushes the current input row down each time this is
+                        # pressed. Overwritten by the next full prompt redraw
+                        # (global:prompt in 40-prompt.ps1 sets it every render).
+                        Set-WindowTitle "pwsh: predictions = SignatureHints only"
+                    } elseif ($current -eq [Microsoft.PowerShell.PredictionSource]::Plugin) {
+                        Set-PSReadLineOption -PredictionSource HistoryAndPlugin
+                        Set-WindowTitle "pwsh: predictions = History + SignatureHints"
+                    } else {
+                        Set-PSReadLineOption -PredictionSource History
+                        Set-WindowTitle "pwsh: predictions = History only"
+                    }
+                    # Changing PredictionSource alone doesn't refresh a list
+                    # that's already on screen -- PSReadLine only recomputes
+                    # predictions on the next real buffer edit. Insert a space
+                    # then delete it (net zero change, any cursor position) to
+                    # force that recompute under the new source immediately
+                    # instead of requiring the user to retype the command.
+                    [Microsoft.PowerShell.PSConsoleReadLine]::Insert(' ')
+                    [Microsoft.PowerShell.PSConsoleReadLine]::BackwardDeleteChar()
+                }
+                Set-PSReadLineKeyHandler -Key Ctrl+Spacebar -ScriptBlock {
+                    param($key, $arg)
+                    Switch-PredictionSource
+                }
             }
             catch {
                 Write-Warning "SignatureHintPredictor: failed to load — $_"

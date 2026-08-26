@@ -17,12 +17,16 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         // File system
         "ls", "l", "ll", "la", "lla", "cd", "mcd", "tre", "rm", "rmr", "md",
         "touch", "open", "v", "vb", "odx", "odx1", "remspace", "cp", "mv", "copy", "view",
+        "..", "...", "....",
         // Navigation
         "cdh", "go-repos", "rp", "rpa", "rpam", "rpn", "rpnm", "rpc", "rpp", "rpm", "rpnc",
         // Search
         "g", "g1", "g2", "rgs", "rgs1", "rgs2", "fch", "fchs", "psgrep", "which",
         // Shell
-        "sb", "r", "fr", "path", "brk", "aliases", "gitaliases", "allaliases", "cheat", "doctor", "build-predictor",
+        "sb", "r", "c", "fr", "path", "brk", "aliases", "gitaliases", "allaliases", "cheat", "doctor",
+        "build-predictor", "compreload",
+        // SSH
+        "ssh", "ssx",
         // Scripts
         "merge-explorer", "grev",
         // Workspace / trash
@@ -86,6 +90,10 @@ public sealed class SignatureHintPredictor : ICommandPredictor
 
         // ── Shell utilities ──────────────────────────────────────────────────────
         "fr"                        => new[] { "<find>", "<replace>", "[path]" },
+        "compreload"                => new[] { "<command>" },
+
+        // ── SSH ──────────────────────────────────────────────────────────────────
+        "ssh" or "ssx"              => new[] { "<host>", "[args]" },
 
         // ── Workspace / trash ────────────────────────────────────────────────────
         "repos-status"              => new[] { "[root]" },
@@ -156,7 +164,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "wt-workspace"              => new[] { "-Path", "<path>", "-Repos", "<url,...>", "-Branches", "<branch,...>" },
         "wt-default-base"           => new[] { "[branch]" },
         "fix-fetch-refspecs"        => new[] { "[root]" },
-        // wt-gof, gitcf, copy, cheat, doctor take no arguments — no entry needed
+        // wt-gof, gitcf, copy, cheat, doctor, c, .., ..., .... take no arguments — no entry needed
 
         _                           => null,
     };
@@ -174,39 +182,61 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         var cmd = parts[0];
         var sig = GetSig(cmd);
 
-        // Exact command match — append remaining argument hints.
+        var suggestions = new List<PredictiveSuggestion>();
+
+        // Exact command match — append remaining argument hints. Doesn't
+        // return early: some commands (e.g. "g", the grep-search alias) are
+        // themselves complete valid commands AND a prefix of many other
+        // commands ("gs", "gst", "g!", ...) -- short-circuiting here used to
+        // mean typing "g" only ever showed the grep hint and never the git
+        // aliases sharing that prefix. Both are shown together instead.
         if (sig != null)
         {
             var provided = parts.Length - 1;
-            if (provided >= sig.Length) return default;
-            var suggestion = text.TrimEnd();
-            for (var i = provided; i < sig.Length; i++)
-                suggestion += " " + sig[i];
-            return new SuggestionPackage(new List<PredictiveSuggestion> { new PredictiveSuggestion(suggestion) });
+            if (provided < sig.Length)
+            {
+                var suggestion = text.TrimEnd();
+                for (var i = provided; i < sig.Length; i++)
+                    suggestion += " " + sig[i];
+                suggestions.Add(new PredictiveSuggestion(suggestion));
+            }
         }
 
-        // Partial prefix — suggest all known commands that start with the typed text.
-        // Only fires when the user has typed a single word (no space yet).
-        if (parts.Length == 1 && cmd.Length >= 2)
+        // Partial prefix — suggest other known commands that start with the
+        // typed text. Only fires when the user has typed a single word (no
+        // space yet), and either it's at least 2 characters or it's itself a
+        // known command (e.g. "g") -- the latter is what surfaces the
+        // longer git aliases sharing that prefix; a bare unrecognized single
+        // character otherwise stays quiet to avoid noise.
+        if (parts.Length == 1 && (cmd.Length >= 2 || Array.IndexOf(AllCommands, cmd) >= 0))
         {
-            var suggestions = new List<PredictiveSuggestion>();
+            // Collect and sort first -- AllCommands is grouped by category
+            // (file system, git, worktree, ...), not alphabetical, so taking
+            // the first 15 matches in array order would silently favor
+            // whichever category happens to come first instead of showing
+            // the alphabetically nearest matches.
+            var matches = new List<string>();
             foreach (var known in AllCommands)
             {
-                if (!known.StartsWith(cmd, StringComparison.OrdinalIgnoreCase) || known == cmd)
-                    continue;
+                if (known.StartsWith(cmd, StringComparison.OrdinalIgnoreCase) && known != cmd)
+                    matches.Add(known);
+            }
+            matches.Sort(StringComparer.OrdinalIgnoreCase);
 
+            foreach (var known in matches)
+            {
                 var knownSig = GetSig(known);
                 var full = knownSig != null && knownSig.Length > 0
                     ? known + " " + string.Join(" ", knownSig)
                     : known;
 
                 suggestions.Add(new PredictiveSuggestion(full));
-                if (suggestions.Count >= 5) break;
+                if (suggestions.Count >= 25) break;
             }
-
-            if (suggestions.Count > 0)
-                return new SuggestionPackage(suggestions);
         }
+
+        if (suggestions.Count > 0)
+            return new SuggestionPackage(suggestions);
 
         return default;
     }

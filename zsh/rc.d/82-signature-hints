@@ -32,6 +32,8 @@ _SIGHINT_SIGS=(
     odx             "<file>"
     odx1            "<file>"
     remspace        "<path>"
+    cp              "<source> <dest>"
+    mv              "<source> <dest>"
 
     # Search
     g               "<pattern>"
@@ -43,9 +45,17 @@ _SIGHINT_SIGS=(
     fch             "<pattern>"
     fchs            "<pattern>"
     psgrep          "<name>"
+    ng              "<pattern>"
 
     # Shell utilities
     fr              "<find> <replace> [path]"
+
+    # SSH
+    ssh             "<host> [args]"
+    ssx             "<host> [args]"
+
+    # Git — project
+    make-project    "<name> <licence-file>"
 
     # Git — status / info
     gbl             "<file>"
@@ -92,6 +102,7 @@ _SIGHINT_SIGS=(
 
     # Git — cherry-pick
     gitcp           "<commit>"
+    gclean          "[path]"
 
     # Git — push / remote
     pushdr          "<remote-branch>"
@@ -101,6 +112,7 @@ _SIGHINT_SIGS=(
     gri             "[target|HEAD~N]"
     grim            "[target|HEAD~N]"
     rebaseon        "<branch-fragment>"
+    rebase          "<branch-fragment>"
     grof            "<branch>"
 
     # Git — reverted changes
@@ -133,9 +145,12 @@ _SIGHINT_SIGS=(
 typeset -ga _SIGHINT_ALL_COMMANDS
 _SIGHINT_ALL_COMMANDS=(
     ls l ll la lla cd mcd tre rm rmr md touch open v vb odx odx1 remspace
-    cdh rp rpp rpz rpsource rpa rpam rpn rpnm rpc rpm rpnc sb bye c
-    g g1 g2 rgs rgs1 rgs2 fch fchs psgrep path brk fr
+    cp mv .. ... ....
+    cdh rp rpp rpz rpsource rpa rpam rpn rpnm rpc rpm rpnc rps sb bye c r
+    g g1 g2 rgs rgs1 rgs2 fch fchs psgrep ng path brk fr
     dbuild
+    ssh ssx
+    make-project cabal-dev-here
     gstat g! git! gbl gs gits gitsn gsl gl gitl gl2 gitl2 gitlg gitlg2 rs
     ga gita gau gitau gaw gaw1 gc gca gitca gitcm uncommit gdf gdfs gdf1
     gres gitres gress grh gup gitrmc ignoreme dontignoreme localignore gar
@@ -145,10 +160,10 @@ _SIGHINT_ALL_COMMANDS=(
     gitf gitpl update updated
     gpf gitfp gitpf gp1 pushdr pushdr-f
     gru grpo giturl gitremote-reset remote!
-    gri grim grd grm gro groi grod grof rebaseon gitra gitrc groot
+    gri grim grd grm gro groi grod grof rebaseon rebase gitra gitrc groot
     grev grev-clean grev-scan
     wt-go wt-list wt-feature wt-fix wt-c wt-done wt-done-f wt! wt-prune wt-repair wt-setup wt-workspace wt-default-base fix-fetch-refspecs
-    copy cheat repos-status trash-restore trash-empty wt-gof gitcf z zsh-doctor view
+    copy cheat repos-status trash-restore trash-empty remspace_dir wt-gof gitcf z zsh-doctor view
 )
 
 _sighint_compute() {
