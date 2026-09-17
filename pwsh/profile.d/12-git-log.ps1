@@ -52,7 +52,7 @@ function global:gl {
             '--date=format:%a %d/%m/%y %H:%M' `
             @args | less -R
     } catch {
-        if ($_.Exception.Message -notmatch 'pipe') { throw }
+        if ($_.Exception.Message -notmatch 'pipe|closed') { throw }
     }
 }
 Set-Alias -Name gitl -Value gl -Force -Option AllScope
@@ -97,7 +97,7 @@ function global:gl2 {
             }
         } | less -R
     } catch {
-        if ($_.Exception.Message -notmatch 'pipe') { throw }
+        if ($_.Exception.Message -notmatch 'pipe|closed') { throw }
     }
 }
 Set-Alias -Name gitl2 -Value gl2 -Force -Option AllScope
@@ -110,7 +110,7 @@ function global:gitlg {
             "--format=format:%C(bold blue)%h%C(reset)  %C(bold green)%<(14)%ar%C(reset)  %C(cyan)%<(20,trunc)%an%C(reset)  %s%C(bold yellow)%d%C(reset)" `
             @args | less -R
     } catch {
-        if ($_.Exception.Message -notmatch 'pipe') { throw }
+        if ($_.Exception.Message -notmatch 'pipe|closed') { throw }
     }
 }
 
@@ -120,6 +120,6 @@ function global:gitlg2 {
     try {
         git log --oneline --graph --decorate --all --color=always @args | less -R
     } catch {
-        if ($_.Exception.Message -notmatch 'pipe') { throw }
+        if ($_.Exception.Message -notmatch 'pipe|closed') { throw }
     }
 }

@@ -31,6 +31,23 @@ CLAUDE_MODEL_FAST='claude-haiku-4-5-20251001'
 export CLAUDE_MODEL CLAUDE_MODEL_FAST
 
 # ---------------------------------------------------------------------------
+# less — vim-flavoured keys and defaults.
+#
+# LESSKEYIN points straight at the repo (less 582+ reads source format), so
+# editing shared/less/lesskey takes effect on the next pager with nothing to
+# redeploy. ~/.resources is the symlink to this repo's zsh/ directory, so
+# ../shared resolves to the repo root. Older builds need the compiled ~/.less,
+# which bootstrap.sh produces when the lesskey command is available.
+# LESS itself is also set in the lesskey file's #env section; this is the
+# fallback for the compiled path, where #env is baked in at compile time.
+# ---------------------------------------------------------------------------
+LESSKEYIN="${HOME}/.resources/../shared/less/lesskey"
+test -f "$LESSKEYIN" && export LESSKEYIN || unset LESSKEYIN
+test -f "${HOME}/.less" && export LESSKEY="${HOME}/.less"
+test "x$LESS" = "x" && LESS="-R -i -j4 --incsearch"
+export LESS
+
+# ---------------------------------------------------------------------------
 # Colorized man pages via bat, if installed — falls back to the default
 # pager otherwise.
 # ---------------------------------------------------------------------------

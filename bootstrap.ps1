@@ -144,6 +144,22 @@ if ((Test-Path $vimDest) -and ((Get-Content $vimDest -Raw) -ne $stub)) {
 New-Item -ItemType Directory -Force -Path (Join-Path $HOME '.vim\undodir') | Out-Null
 Write-Host "    ~/.vimrc sources the repo; edits to shared/vim/vimrc are live in the next vim"
 
+# vim 8 packages, cloned into the repo (gitignored) rather than vendored, so
+# updating is a pull and the dotfiles stay free of third-party code.
+$packDir = Join-Path $repoDir 'shared\vim\pack\plugins\start'
+$vmDir   = Join-Path $packDir 'vim-visual-multi'
+New-Item -ItemType Directory -Force -Path $packDir | Out-Null
+if (Test-Path (Join-Path $vmDir '.git')) {
+    Write-Host "    vim-visual-multi: updating"
+    git -C $vmDir pull --quiet --ff-only
+} else {
+    Write-Host "    vim-visual-multi: cloning"
+    git clone --quiet --depth 1 https://github.com/mg979/vim-visual-multi.git $vmDir
+}
+if (-not (Test-Path $vmDir)) {
+    Write-Host "    (vim-visual-multi unavailable -- vim works fine without it)"
+}
+
 # --- 5. Optional PowerShell modules --------------------------------------------
 foreach ($mod in @('PSFzf', 'BurntToast')) {
     if (Get-Module -ListAvailable -Name $mod) {

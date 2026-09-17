@@ -6,3 +6,6 @@
 
 # staging area for files Claude could not delete directly
 _to_delete/
+
+# vim 8 packages are cloned by bootstrap, not vendored here
+shared/vim/pack/

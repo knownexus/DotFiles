@@ -76,6 +76,35 @@ echo "    ~/.vimrc -> $VIMRC_SRC"
 mkdir -p "$HOME/.vim/undodir"
 echo "    cheatsheet read from the repo (F1 or <space>c toggles it)"
 
+# vim 8 packages, cloned into the repo (gitignored) rather than vendored, so
+# updating is a pull and the dotfiles stay free of third-party code.
+PACK_DIR="$REPO_DIR/shared/vim/pack/plugins/start"
+mkdir -p "$PACK_DIR"
+if [ -d "$PACK_DIR/vim-visual-multi/.git" ]; then
+    echo "    vim-visual-multi: updating"
+    git -C "$PACK_DIR/vim-visual-multi" pull --quiet --ff-only || \
+        echo "    (update failed — keeping the existing copy)"
+else
+    echo "    vim-visual-multi: cloning"
+    git clone --quiet --depth 1 https://github.com/mg979/vim-visual-multi.git \
+        "$PACK_DIR/vim-visual-multi" || \
+        echo "    (clone failed — vim works fine without it)"
+fi
+
+# --- 3b. less key bindings -----------------------------------------------------
+# less 582+ reads the source file directly via $LESSKEYIN (set in
+# zsh/rc.d/70-variables), so nothing needs deploying there. Older builds only
+# read a compiled ~/.less, so produce one when the lesskey command exists.
+if command -v lesskey >/dev/null 2>&1; then
+    less_major=$(less --version 2>/dev/null | head -1 | sed -n 's/^less \([0-9]*\).*/\1/p')
+    if [ -n "$less_major" ] && [ "$less_major" -lt 582 ] 2>/dev/null; then
+        lesskey -o "$HOME/.less" "$REPO_DIR/shared/less/lesskey" && \
+            echo "    less < 582 — compiled key bindings to ~/.less"
+    else
+        echo "    less reads shared/less/lesskey directly (no compile needed)"
+    fi
+fi
+
 # --- 4. Install everything this config uses -----------------------------------
 PKG_MANAGER=""
 if command -v dnf >/dev/null 2>&1; then PKG_MANAGER=dnf

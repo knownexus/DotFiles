@@ -2,6 +2,14 @@
 ║         VIM  CHEATSHEET          ║
 ╚══════════════════════════════════╝
 
+── THIS PANE ───────────────────────
+  <CR>/tab  open / close a section
+  J / K     next / prev section
+  f         filter (F clears it)
+  zR / zM   expand / collapse all
+  q / ESC   close the pane
+  :Cheatsheet <text>  open filtered
+
 ── MODES ───────────────────────────
   i         insert before cursor
   a         insert after cursor
@@ -52,6 +60,44 @@
   r<char>   fill block with char
   gv        reselect last selection
   >  /  <   indent / dedent selection
+
+── MULTI-CURSOR (live) ─────────────
+  ctrl+n    select word, again = next
+  ctrl+down add cursor below
+  ctrl+up   add cursor above
+  <space>m  select ALL occurrences
+  tab       cursor <-> extend mode
+  n / N     next / skip occurrence
+  q         skip this one, go to next
+  ESC       back to one cursor
+  (edits show live, no ESC needed)
+
+── DIFF (side by side) ─────────────
+  <space>d  diff this file vs HEAD
+  :GitDiff <rev>  vs any revision
+  ]c / [c   next / prev change
+  do        take their version (get)
+  dp        push mine over (put)
+  :diffupdate  recompute
+  <space>d  close the diff
+  shell: gdv = gdf side by side
+         gsv <sha> = gs side by side
+    :qa   next file   :cq  abort run
+
+── LESS (the pager) ────────────────
+  j / k     line down / up
+  ctrl+f/b  page fwd / back
+  ctrl+d/u  half page
+  gg / G    top / bottom
+  / ?  n N  search fwd/back, next/prev
+  <space>h  clear search highlight
+  &pat      show ONLY matching lines
+  m<a> '<a> set / jump to mark
+  v         edit this file in vim
+  F         follow, like tail -f
+  -S        toggle line wrapping
+  q / ZZ    quit
+  h         less's own help
 
 ── SPLITS & WINDOWS ────────────────
   ctrl+w s  horizontal split

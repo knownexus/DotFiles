@@ -1,0 +1,45 @@
+# ===========================================================================
+# vim-flavoured key bindings for less.
+#
+# less is already close to vi: j/k, /, ?, n/N, G, ctrl-f/b, ctrl-d/u, m and '
+# for marks all behave as you would expect. This file closes the remaining
+# gaps so muscle memory from vim carries over to every paged git command.
+#
+# Format: source-form lesskey, read directly by less 582+ via $LESSKEYIN.
+# For older builds, bootstrap compiles it to ~/.less with the lesskey command.
+# ===========================================================================
+
+#command
+
+# gg to the top, matching vim. (g alone still works; less waits briefly for a
+# possible second g, which is the one small cost of this binding.)
+gg        goto-line
+ZZ        quit
+ZQ        quit
+
+# Vim's window-scroll pair. less binds ctrl-e/ctrl-y to the same thing, but
+# spell it out so it survives any future default change.
+\ne       forw-line
+\ny       back-line
+
+# Horizontal scrolling where vim would use zl / zh — useful on wide diffs
+# once chop-long-lines (-S) is on.
+zl        right-scroll
+zh        left-scroll
+
+# Clear the search highlight, like <space>h in vim.
+\40h      undo-hilite
+
+# Half-page jumps that do not depend on the terminal's ctrl handling.
+\40d      forw-scroll
+\40u      back-scroll
+
+#env
+
+# Defaults for every invocation, matching the vim config:
+#   -R  render colour escapes (git --color=always output)
+#   -i  case-insensitive search until the pattern has a capital  == smartcase
+#   -j4 keep 4 lines of context above a search hit               == scrolloff
+#   --incsearch  search as you type                              == incsearch
+# No -X, so the pager clears on exit and leaves the console clean.
+LESS = -R -i -j4 --incsearch

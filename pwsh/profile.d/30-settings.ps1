@@ -1,4 +1,4 @@
-# Shell history and behaviour settings — mirrors zsh 30-settings
+﻿# Shell history and behaviour settings — mirrors zsh 30-settings
 
 # A command taking at least this many seconds triggers the long-command
 # desktop notification in 40-prompt.ps1 (mirrors REPORTTIME).
@@ -6,6 +6,12 @@ $global:ReportTime = 10
 
 if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
     Import-Module PSReadLine -ErrorAction SilentlyContinue
+
+    # The prompt (40-prompt.ps1) writes one line of its own -- the right-aligned
+    # path + VCS info -- before returning the "$ " line that PSReadLine edits.
+    # PSReadLine assumes a one-line prompt unless told otherwise, and gets the
+    # redraw wrong after a window resize if that assumption is false.
+    Set-PSReadLineOption -ExtraPromptLineCount 1
 
     # Deduplicate history (mirrors HIST_IGNORE_ALL_DUPS)
     Set-PSReadLineOption -HistoryNoDuplicates

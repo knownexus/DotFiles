@@ -132,6 +132,27 @@ alias gitcm='git commit -m'
 alias uncommit='git reset --soft HEAD^'
 
 gdf()  { git diff --color=always "$@" | less -R; }
+# Side-by-side in vim instead of inline in the pager: steps through each
+# changed file in turn. --no-prompt skips the "launch vimdiff? [Y/n]" per file.
+# --trust-exit-code makes :cq (quit vim with an error) abort the whole run;
+# without it git ignores the tool's exit code and marches through every
+# remaining file regardless. :qa still moves on to the next one normally.
+gdv()  { git difftool --no-prompt --trust-exit-code --tool=vimdiff "$@"; }
+gdvs() { git difftool --no-prompt --trust-exit-code --tool=vimdiff --staged "$@"; }
+
+# gs, side by side: a commit against its parent. <rev>^! is git's shorthand
+# for exactly that. Merges are the exception — git shows no diff for a merge
+# commit, so ^! would open nothing at all; fall back to the first parent,
+# which is what you actually want to see for a merge.
+gsv() {
+    local rev=${1:-HEAD}
+    if [ "$(git rev-list --no-walk --count --merges "$rev" 2>/dev/null)" = "1" ]; then
+        print -u2 "gsv: $rev is a merge — diffing against its first parent"
+        git difftool --no-prompt --trust-exit-code --tool=vimdiff "${rev}^1" "$rev"
+    else
+        git difftool --no-prompt --trust-exit-code --tool=vimdiff "${rev}^!"
+    fi
+}
 gdfs() { git diff --staged --color=always "$@" | less -R; }
 gdf1() { git diff HEAD~1 --color=always "$@" | less -R; }
 

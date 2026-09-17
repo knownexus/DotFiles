@@ -1,5 +1,27 @@
 ﻿# Git core — status, blame, add, archive, commit, diff, restore, show, reset, misc
 
+# Shared pager — runs git and pipes it through less, swallowing the broken-pipe
+# error PowerShell raises when you quit less before git has finished writing
+# ("Program 'git.exe' failed to run: The pipe is being closed"). That is normal
+# and expected when paging: less exits, git's stdout goes away mid-write.
+# $PSNativeCommandUseErrorActionPreference (PS 7.3+) turns that into a
+# terminating error, so it has to be caught rather than ignored.
+# No param() block on purpose: with one, PowerShell tries to bind tokens like
+# --color=always as parameter names and fails. A simple function passes
+# everything through $args untouched, which is what git needs.
+function global:Invoke-GitPaged {
+    # Scoped to this function: stops PS 7.3+ turning a native command's
+    # failure into a terminating error in the first place. The try/catch below
+    # still covers PS 5.1 and any case where the error escapes anyway.
+    $PSNativeCommandUseErrorActionPreference = $false
+    $ErrorActionPreference = 'Continue'
+    try {
+        & git @args | less -R
+    } catch {
+        if ($_.Exception.Message -notmatch 'pipe|closed') { throw }
+    }
+}
+
 # Shared guard — returns $true if inside a git repo, otherwise prints a message and returns $false.
 function global:Assert-GitRepo {
     if (git rev-parse --git-dir 2>$null) { return $true }
@@ -133,9 +155,32 @@ function global:gitcm  { git commit -m @args }
 function global:uncommit { git reset --soft HEAD^ }
 
 # Diff
-function global:gdf  { git diff --color=always @args | less -R }
-function global:gdfs { git diff --staged --color=always @args | less -R }
-function global:gdf1 { git diff HEAD~1 --color=always @args | less -R }
+function global:gdf  { Invoke-GitPaged diff --color=always @args }
+# Side-by-side in vim instead of inline in the pager (steps through each file).
+# --trust-exit-code makes :cq (quit vim with an error) abort the whole run;
+# without it git ignores the tool's exit code and walks every remaining file.
+function global:gdv  { git difftool --no-prompt --trust-exit-code --tool=vimdiff @args }
+function global:gdvs { git difftool --no-prompt --trust-exit-code --tool=vimdiff --staged @args }
+
+# gsv is a built-in alias for Get-Service, and aliases outrank functions —
+# remove it or the function below is unreachable. (95-alias-guards.ps1 also
+# sweeps for this, but keep the local guard so this file stands alone.)
+Remove-Item -Path Alias:gsv -Force -ErrorAction SilentlyContinue
+
+# gs, side by side: a commit against its parent (<rev>^! is git's shorthand).
+# Merges show no diff under ^!, so fall back to the first parent for those.
+function global:gsv {
+    $rev = if ($args.Count -gt 0) { $args[0] } else { 'HEAD' }
+    $isMerge = (git rev-list --no-walk --count --merges $rev 2>$null)
+    if ($isMerge -eq '1') {
+        Write-Host "gsv: $rev is a merge — diffing against its first parent"
+        git difftool --no-prompt --trust-exit-code --tool=vimdiff "$rev^1" $rev
+    } else {
+        git difftool --no-prompt --trust-exit-code --tool=vimdiff "$rev^!"
+    }
+}
+function global:gdfs { Invoke-GitPaged diff --staged --color=always @args }
+function global:gdf1 { Invoke-GitPaged diff HEAD~1 --color=always @args }
 
 # Restore
 function global:gres   { git checkout -- @args }
@@ -146,10 +191,10 @@ function global:gress  { git restore --staged @args }
 function global:gitrmc { git rm --cached @args }
 
 # Show
-function global:gs    { git show --color=always @args | less -R }
-function global:gits  { git show --color=always @args | less -R }
-function global:gitsn { git show --name-only --color=always @args | less -R }
-function global:gsl   { git show --color=always @args | less -R }
+function global:gs    { Invoke-GitPaged show --color=always @args }
+function global:gits  { Invoke-GitPaged show --color=always @args }
+function global:gitsn { Invoke-GitPaged show --name-only --color=always @args }
+function global:gsl   { Invoke-GitPaged show --color=always @args }
 
 # Reset — confirms before discarding uncommitted changes
 function global:grh {

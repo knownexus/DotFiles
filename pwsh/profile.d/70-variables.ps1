@@ -1,4 +1,4 @@
-# Environment variables — mirrors zsh 70-variables
+﻿# Environment variables — mirrors zsh 70-variables
 
 if (-not $env:COMPUTERNAME)  { $env:COMPUTERNAME = hostname }
 if (-not $env:VISUAL)        { $env:VISUAL = 'vim' }
@@ -9,6 +9,17 @@ if (-not $env:EDITOR)        { $env:EDITOR = $env:VISUAL }
 # and read the real env block (direnv's config-dir lookup, notably) need
 # $env:HOME set explicitly, unlike POSIX shells which always export it.
 if (-not $env:HOME)          { $env:HOME = $env:USERPROFILE }
+
+# ---------------------------------------------------------------------------
+# less — vim-flavoured keys and defaults.
+#
+# LESSKEYIN points straight at the repo (less 582+, which Git for Windows
+# ships, reads the source format directly), so editing shared/less/lesskey
+# takes effect on the next pager with nothing to redeploy.
+# ---------------------------------------------------------------------------
+$lessKey = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'shared\less\lesskey'
+if (Test-Path $lessKey) { $env:LESSKEYIN = $lessKey }
+if (-not $env:LESS)     { $env:LESS = '-R -i -j4 --incsearch' }
 
 # ---------------------------------------------------------------------------
 # Repo root alias — displayed in the prompt instead of the full path.

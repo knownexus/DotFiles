@@ -1,4 +1,4 @@
-# VCS-aware prompt — mirrors zsh 40-prompt
+﻿# VCS-aware prompt — mirrors zsh 40-prompt
 # Respects $global:RepoRoot / $global:RepoSymbol (set in 70-variables.ps1).
 # Left:  hostname$
 # Right (same line, right-aligned): path [branch:rev,status]
@@ -155,18 +155,27 @@ function global:prompt {
     $failed    = (-not $lastSucceeded) -or ($null -ne $lastExitCode -and $lastExitCode -ne 0)
     $errorPart = if ($failed) { "${red}✗${reset} " } else { '' }
 
-    # Blank line above the prompt for breathing room
-    Write-Host ""
-
-    # Right-align the path + VCS info on the same line as the prompt.
-    # Strategy: move cursor to (terminal width - visible length + 1), write the
-    # coloured right side, then return to column 1 so the prompt renders at the
-    # left edge.
+    # The path + VCS info gets its OWN line, right-aligned, with the input
+    # line beneath it.
+    #
+    # It used to share the input line, positioned with ESC[<col>G. That fights
+    # PSReadLine: PSReadLine takes the cursor position after this function
+    # returns as the origin of its edit buffer, and assumes it owns every
+    # column from there to the end of the line. Text it did not write, sitting
+    # to the right of the input, is invisible to that model -- so any
+    # re-render (the ListView prediction popup, a wrapped line, a window
+    # resize, history search) redraws from a wrong width and smears fragments
+    # of earlier commands across the screen.
+    #
+    # Its own line is free: it replaces the blank spacer that used to be here,
+    # so the prompt still occupies two rows.
     $width = $Host.UI.RawUI.WindowSize.Width
-    $col   = $width - $rightPlain.Length + 1
-    if ($col -lt 1) { $col = 1 }
+    # Leave the last column empty -- writing into it wraps on some terminals.
+    $pad   = $width - $rightPlain.Length - 1
+    if ($pad -lt 0) { $pad = 0 }
 
-    Write-Host "${esc}[${col}G${rightColored}${esc}[1G" -NoNewline
+    Write-Host (' ' * $pad) -NoNewline
+    Write-Host $rightColored
 
     return "${jobPart}${errorPart}${blue}`$ ${reset}"
 }

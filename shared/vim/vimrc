@@ -29,11 +29,24 @@ set wildmode=longest:full,full
 set scrolloff=8
 set sidescrolloff=8
 set cursorline
+" cursorline is one of vim's biggest redraw costs: it repaints the full width
+" of the line on every cursor move, which on a wide terminal with syntax
+" highlighting is very noticeable. cursorlineopt=number keeps the useful part
+" (the highlighted line number) and drops the full-width fill.
+if exists('&cursorlineopt')
+    set cursorlineopt=number
+endif
 set splitright
 set splitbelow
 set display=lastline
 set lazyredraw
 set ttyfast
+
+" Stop syntax highlighting very long lines. Vim highlights to the end of a
+" line however long it is, and a few 2000-character lines (minified output, a
+" long attribute list, a big string literal) are enough to make scrolling
+" crawl. Nothing useful lives past column 300 on screen anyway.
+set synmaxcol=300
 
 syntax enable
 filetype plugin indent on
@@ -63,9 +76,35 @@ set shiftround
 set backspace=indent,eol,start
 set history=1000
 set mouse=a
+" One wheel notch scrolls 3 lines by default, and each notch forces a redraw.
+" When redraws cannot keep up the events queue and the view keeps sliding
+" after you stop scrolling; one line per notch cuts that overshoot by two
+" thirds. (:set mouse= drops wheel handling entirely — then the terminal
+" scrolls its own buffer, which is instant but loses vim's scrollback.)
+" exists('&name'), not has('patch-...'): a build can report a version and
+" still not have the option (a vimrc error costs a 2-second warning delay on
+" EVERY startup, which with one vim per file under gdv/gsv is brutal).
+if exists('&mousescroll')
+    set mousescroll=ver:1,hor:2
+endif
 set hidden
 set confirm
 set nrformats-=octal
+" Let blockwise visual select past the end of short lines, so Ctrl-V + A
+" appends on every line in the block instead of silently skipping the ones
+" that end before the block does.
+set virtualedit=block
+
+" Diff mode: split vertically (side by side, not stacked), keep the two sides
+" aligned with filler lines, ignore pure whitespace-change noise, and use the
+" internal histogram algorithm, which lines hunks up far better than the
+" default on real code.
+set diffopt=filler,vertical,closeoff
+" Blank filler rows instead of a wall of dashes where the other side has lines.
+set fillchars=vert:\ ,fold:\ ,diff:\ 
+" Values, not an option name — an old build accepts 'diffopt' but rejects
+" these, so fail quietly rather than erroring out of the rest of this file.
+silent! set diffopt+=internal,algorithm:histogram,indent-heuristic
 
 " --- Search ----------------------------------------------------------------
 " smartcase only does anything with ignorecase on: together they give
@@ -100,58 +139,58 @@ set undolevels=1000
 let &t_SI = "\e[6 q"        " thin line in insert mode
 let &t_EI = "\e[2 q"        " block in normal mode
 
+" --- Leader ----------------------------------------------------------------
+" Must be set before ANY <leader> mapping is defined — vim expands <leader> to
+" whatever mapleader is at definition time, so a later assignment silently
+" leaves earlier mappings bound to the old leader (the default backslash).
+let mapleader = " "
+
+" --- Plugins ---------------------------------------------------------------
+" Native vim 8 packages, loaded from this repo rather than ~/.vim, so there is
+" one copy and it travels with the dotfiles. Packages under pack/*/start are
+" sourced after this file, so setting packpath here is enough.
+let s:vimrc_dir = fnamemodify(resolve(expand('<sfile>:p')), ':h')
+execute 'set packpath^=' . fnameescape(s:vimrc_dir)
+
+" vim-visual-multi: live multi-cursor editing — unlike a block insert, every
+" cursor echoes what you type as you type it, no Esc needed to see the result.
+"   <C-n>        select the word under the cursor, again for the next match
+"   <C-Down/Up>  add a cursor straight down / up (the block-insert equivalent)
+"   <space>m     select every occurrence of the word under the cursor
+"   <Tab>        switch between cursor and extend mode
+"   <Esc>        back to one cursor
+let g:VM_mouse_mappings   = 1
+let g:VM_show_warnings    = 0
+let g:VM_silent_exit      = 1
+let g:VM_maps             = {}
+let g:VM_maps['Find Under']         = '<C-n>'
+let g:VM_maps['Find Subword Under'] = '<C-n>'
+let g:VM_maps['Select Cursor Down'] = '<C-Down>'
+let g:VM_maps['Select Cursor Up']   = '<C-Up>'
+nmap <silent> <leader>m <Plug>(VM-Select-All)
+
 " --- Cheatsheet ------------------------------------------------------------
-" Look for the cheatsheet next to this vimrc first (resolve() follows the
-" ~/.vimrc symlink on Linux; on Windows ~/.vimrc is a stub that sources the
-" repo copy, so <sfile> lands in the repo either way). ~/.vim is the fallback
-" for a hand-copied install.
-let s:vimrc_dir  = fnamemodify(resolve(expand('<sfile>:p')), ':h')
-let s:cheatsheet = s:vimrc_dir . '/cheatsheet.txt'
-if !filereadable(s:cheatsheet)
-    let s:cheatsheet = expand('~/.vim/cheatsheet.txt')
+" The viewer (folding, filtering, highlighting) lives in cheatsheet.vim next
+" to this file; cheatsheet.txt next to that holds the content.
+if filereadable(s:vimrc_dir . '/cheatsheet.vim')
+    execute 'source ' . fnameescape(s:vimrc_dir . '/cheatsheet.vim')
 endif
 
-function! s:CheatsheetWinnr() abort
-    let l:bufnr = bufnr(s:cheatsheet)
-    return l:bufnr == -1 ? -1 : bufwinnr(l:bufnr)
-endfunction
+" --- Redraw performance tools ----------------------------------------------
+if filereadable(s:vimrc_dir . '/perf.vim')
+    execute 'source ' . fnameescape(s:vimrc_dir . '/perf.vim')
+endif
 
-function! ToggleCheatsheet() abort
-    let l:win = s:CheatsheetWinnr()
-    if l:win != -1
-        execute l:win . 'wincmd c'
-        return
-    endif
-    if !filereadable(s:cheatsheet)
-        echohl WarningMsg
-        echomsg 'Cheatsheet not installed: ' . s:cheatsheet
-        echohl None
-        return
-    endif
-    execute 'vsplit ' . fnameescape(s:cheatsheet)
-    vertical resize 50
-    setlocal nomodifiable buftype=nofile bufhidden=wipe nobuflisted
-    " q / Esc close it from inside, so you never have to remember the
-    " toggle key twice or reach for :q with the wrong window focused.
-    nnoremap <buffer><silent> q     :close<CR>
-    nnoremap <buffer><silent> <Esc> :close<CR>
-    wincmd p
-endfunction
-
-" augroup + autocmd! so re-sourcing this file replaces these rather than
-" stacking a second copy of each.
-augroup cheatsheet
-    autocmd!
-    " Don't let the cheatsheet keep vim alive on :q, or sit there alone.
-    autocmd QuitPre * if s:CheatsheetWinnr() != -1 | execute s:CheatsheetWinnr() . 'wincmd c' | endif
-    autocmd WinEnter * if winnr('$') == 1 && bufnr('%') == bufnr(s:cheatsheet) | quit | endif
-augroup END
+" --- Side-by-side git diff -------------------------------------------------
+if filereadable(s:vimrc_dir . '/gitdiff.vim')
+    execute 'source ' . fnameescape(s:vimrc_dir . '/gitdiff.vim')
+endif
 
 " --- Mappings --------------------------------------------------------------
-let mapleader = " "
 nnoremap <leader>w :write<CR>
 nnoremap <leader>q :quit<CR>
 nnoremap <leader>h :nohlsearch<CR>
+nnoremap <silent> <leader>d :GitDiff<CR>
 " Cheatsheet: F1 is one keypress and already means "help" everywhere, so it
 " is the primary binding (vim's own F1 -> :help is remapped away). <space>c is
 " the mnemonic alternative for keyboards that bury the function row.

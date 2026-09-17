@@ -161,6 +161,7 @@ general:
     cmd: wl-copy/xclip/xsel
   - keys: cheat
     desc: full cheatsheet (aliases + gitaliases + keybindings), paged through less
+          (vim keys work in the pager — gg/G, /, n/N, &filter, ZZ)
     cmd: (custom)
   - keys: allaliases
     desc: the same tables printed straight to the terminal, unpaged
@@ -245,6 +246,15 @@ git:
   - keys: gdf1
     desc: show changes introduced by the last commit, paged through less
     cmd: git diff HEAD~1 | less
+  - keys: gdv
+    desc: side-by-side diff in vim, one file at a time
+    cmd: git difftool --tool=vimdiff
+  - keys: gdvs
+    desc: same for staged changes
+    cmd: git difftool --tool=vimdiff --staged
+  - keys: gsv [rev]
+    desc: side-by-side view of one commit vs its parent (gs, side by side)
+    cmd: git difftool --tool=vimdiff <rev>^!
 - section: Commit
   commands:
   - keys: gc
