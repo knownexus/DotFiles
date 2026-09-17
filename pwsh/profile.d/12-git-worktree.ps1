@@ -76,6 +76,24 @@ function global:wt-list {
     git --git-dir=$gitDir worktree list
 }
 
+# Resolves 'main'/'master' to whichever of the two this repo actually uses, so
+# naming either works in a repo that uses the other (main in a master-era repo
+# and vice versa). Prefers the name given when both exist, checks local
+# branches first then origin/, and hands back the input unchanged if neither
+# exists (new repo) or if it isn't main/master at all. $GitArgs is spliced
+# straight into the git call — "--git-dir=$gitDir" or @('-C', $gitRoot).
+function script:Resolve-WtPrimaryBranch {
+    param([string]$Branch, [string[]]$GitArgs)
+    if ($Branch -ne 'main' -and $Branch -ne 'master') { return $Branch }
+    $other = if ($Branch -eq 'main') { 'master' } else { 'main' }
+    foreach ($ns in @('refs/heads', 'refs/remotes/origin')) {
+        foreach ($candidate in @($Branch, $other)) {
+            if (git @GitArgs rev-parse --verify --quiet "$ns/$candidate" 2>$null) { return $candidate }
+        }
+    }
+    return $Branch
+}
+
 # Resolves the branch wt-feature/wt-fix should branch from when -Base isn't
 # given explicitly: this repo's configured default (wt.default-base, set via
 # wt-default-base below), falling back to 'develop' if never configured.
@@ -94,6 +112,11 @@ function global:wt-default-base {
     $gitDir = Get-WorktreeGitDir
     if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
     if ($Branch) {
+        $resolved = Resolve-WtPrimaryBranch $Branch "--git-dir=$gitDir"
+        if ($resolved -ne $Branch) {
+            Write-Host "'$Branch' → '$resolved' (this repo's primary branch)" -ForegroundColor DarkGray
+            $Branch = $resolved
+        }
         git --git-dir=$gitDir config wt.default-base $Branch
         Write-Host "wt-feature/wt-fix will now default to '$Branch' in this repo"
     } else {
@@ -111,6 +134,11 @@ function global:wt-feature {
     $gitDir = Get-WorktreeGitDir
     if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
     if (-not $Base) { $Base = Resolve-WtDefaultBase $gitDir }
+    $resolved = Resolve-WtPrimaryBranch $Base "--git-dir=$gitDir"
+    if ($resolved -ne $Base) {
+        Write-Host "Base '$Base' → '$resolved' (this repo's primary branch)" -ForegroundColor DarkGray
+        $Base = $resolved
+    }
     $Desc   = $Desc -replace ' ', '_'
     $root   = Get-GitWorktreeRoot
     $wtPath = Join-Path $root "feature\$TicketId-$Desc"
@@ -127,6 +155,11 @@ function global:wt-fix {
     $gitDir = Get-WorktreeGitDir
     if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
     if (-not $Base) { $Base = Resolve-WtDefaultBase $gitDir }
+    $resolved = Resolve-WtPrimaryBranch $Base "--git-dir=$gitDir"
+    if ($resolved -ne $Base) {
+        Write-Host "Base '$Base' → '$resolved' (this repo's primary branch)" -ForegroundColor DarkGray
+        $Base = $resolved
+    }
     $Desc   = $Desc -replace ' ', '_'
     $root   = Get-GitWorktreeRoot
     $wtPath = Join-Path $root "fix\$TicketId-$Desc"
@@ -139,6 +172,11 @@ function global:wt-c {
     param([Parameter(Mandatory)][string]$Branch)
     $gitDir = Get-WorktreeGitDir
     if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
+    $resolved = Resolve-WtPrimaryBranch $Branch "--git-dir=$gitDir"
+    if ($resolved -ne $Branch) {
+        Write-Host "'$Branch' → '$resolved' (this repo's primary branch)" -ForegroundColor DarkGray
+        $Branch = $resolved
+    }
     $root   = Get-GitWorktreeRoot
     $wtPath = Join-Path $root ($Branch -replace '/', '\')
     git --git-dir=$gitDir worktree add $wtPath $Branch
@@ -287,6 +325,11 @@ function global:New-GitWorktreeSetup {
     Write-Host "Workspace: $workspaceDir" -ForegroundColor Green
 
     foreach ($branch in $Branches) {
+        $resolved = Resolve-WtPrimaryBranch $branch @('-C', $gitRoot)
+        if ($resolved -ne $branch) {
+            Write-Host "  [$branch] → '$resolved' (this repo's primary branch)" -ForegroundColor DarkGray
+            $branch = $resolved
+        }
         $safeName    = $branch -replace '[/\\]', '-'
         $worktreeDir = Join-Path $workspaceDir $safeName
 
@@ -324,6 +367,7 @@ function global:New-GitWorktreeSetup {
 }
 
 Set-Alias wt-setup New-GitWorktreeSetup
+Set-Alias wt-init  New-GitWorktreeSetup   # alternative name for the same command
 
 # Workspace — clone multiple repos each with their own worktrees
 Remove-Item -Path Alias:wt-workspace        -Force -ErrorAction SilentlyContinue

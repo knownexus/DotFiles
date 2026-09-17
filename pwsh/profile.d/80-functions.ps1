@@ -47,9 +47,30 @@ function global:New-GitProject {
 }
 Set-Alias -Name make-project -Value New-GitProject
 
-# Aliases cheat sheet — print defined aliases grouped by section
+<#
+Cheatsheets. Every renderer below *emits* its lines rather than
+Write-Host-ing them, so `cheat` can pipe the whole ~200-line thing into a
+pager instead of dumping it all into the scrollback — which also means the
+colours have to be raw ANSI, since Write-Host's -ForegroundColor writes
+straight to the host and never reaches the pipeline.
+
+(Top-level "# Comment" lines are section headers to the parser in
+Show-ProfileAliases below, so the notes in here are block comments.)
+#>
+$script:CheatColors = @{
+    reset  = "$([char]27)[0m"
+    cyan   = "$([char]27)[36m"
+    yellow = "$([char]27)[33m"
+    gray   = "$([char]27)[90m"
+}
+
+<#
+Prints the aliases/functions defined in one profile.d file, grouped by the
+top-level section comments in it.
+#>
 function global:Show-ProfileAliases {
     param([string]$File, [string]$Title)
+    $c = $script:CheatColors
     $lines   = Get-Content $File
     # First pass: collect Set-Alias -Value targets (implementation helpers, not short names)
     $targets = @{}
@@ -82,44 +103,37 @@ function global:Show-ProfileAliases {
             }
         }
     }
-    Write-Host ""
-    Write-Host "  $Title" -ForegroundColor Cyan
-    Write-Host "  $('─' * ($Title.Length + 1))" -ForegroundColor DarkGray
+    ""
+    "  $($c.cyan)$Title$($c.reset)"
+    "  $($c.gray)$('─' * ($Title.Length + 1))$($c.reset)"
     foreach ($sec in $sections.Keys) {
         $names = $sections[$sec]
         if (-not $names -or $names.Count -eq 0) { continue }
-        Write-Host "   $sec" -ForegroundColor Yellow
-        $names | ForEach-Object { Write-Host ("     $_") -ForegroundColor White }
+        "   $($c.yellow)$sec$($c.reset)"
+        foreach ($n in $names) { "     $n" }
     }
 }
 
-function global:aliases {
-    Show-ProfileAliases (Join-Path $script:RESDIR 'profile.d\10-ls.ps1')       'ls aliases'
-    Show-ProfileAliases (Join-Path $script:RESDIR 'profile.d\11-aliases.ps1')   'General aliases'
-    Show-ProfileAliases (Join-Path $script:RESDIR 'profile.d\80-functions.ps1') 'Functions'
-    Write-Host ""
-}
+<#
+Renders one top-level group out of the shared commands.yaml (also consumed
+by the zsh side) as an aligned three-column table, instead of keeping a
+second hand-maintained copy of the same data per platform. Rows carrying
+`only: zsh` belong to the other shell and are filtered out here.
+#>
+function global:Show-YamlCheatsheet {
+    param([string]$Group, [string]$Title)
+    $c = $script:CheatColors
 
-function global:gitaliases {
-    $esc    = [char]27
-    $cyan   = "${esc}[36m"
-    $yellow = "${esc}[33m"
-    $gray   = "${esc}[90m"
-    $reset  = "${esc}[0m"
-
-    # Reads the "git" table out of the shared commands.yaml (also consumed
-    # by the zsh side's gitaliases) via yq, instead of keeping a second
-    # hand-maintained copy of the same ~90-entry table here.
     $yamlPath = Join-Path $script:SHAREDDIR 'commands.yaml'
     if (-not (Get-Command yq -ErrorAction SilentlyContinue)) {
-        Write-Host "gitaliases: yq not found -- install it (winget install MikeFarah.yq) to see this table" -ForegroundColor Yellow
+        "$($c.yellow)$Group`: yq not found -- install it (winget install MikeFarah.yq) to see this table$($c.reset)"
         return
     }
 
-    $sectionNames = @(& yq -r '.git[].section' $yamlPath)
+    $sectionNames = @(& yq -r ".${Group}[].section" $yamlPath)
     $sections = [ordered]@{}
     for ($i = 0; $i -lt $sectionNames.Count; $i++) {
-        $rows = @(& yq -r ".git[$i].commands[] | [.keys, .cmd, .desc] | @tsv" $yamlPath)
+        $rows = @(& yq -r ".${Group}[$i].commands[] | select((.only // `"pwsh`") == `"pwsh`") | [.keys, .cmd, .desc] | @tsv" $yamlPath)
         $entries = @()
         foreach ($row in $rows) {
             $parts = $row -split "`t"
@@ -133,30 +147,60 @@ function global:gitaliases {
     $aliasWidth  = 2 + ($allEntries | ForEach-Object { $_[0].Length } | Measure-Object -Maximum).Maximum
     $cmdWidth    = 2 + ($allEntries | ForEach-Object { $_[1].Length } | Measure-Object -Maximum).Maximum
 
-    Write-Host ""
-    Write-Host "  ${cyan}Git aliases${reset}"
-    Write-Host "  ${gray}$('─' * ($aliasWidth + $cmdWidth + 20))${reset}"
+    ""
+    "  $($c.cyan)$Title$($c.reset)"
+    "  $($c.gray)$('─' * ($aliasWidth + $cmdWidth + 20))$($c.reset)"
 
     foreach ($section in $sections.Keys) {
-        Write-Host ""
-        Write-Host "  ${yellow}$section${reset}"
+        if (-not $sections[$section]) { continue }
+        ""
+        "  $($c.yellow)$section$($c.reset)"
         foreach ($entry in $sections[$section]) {
-            $aliases = $entry[0]
-            $cmd     = $entry[1]
-            $desc    = $entry[2]
+            $aliases  = $entry[0]
+            $cmd      = $entry[1]
+            $desc     = $entry[2]
             $aliasPad = ' ' * [Math]::Max(1, $aliasWidth - $aliases.Length)
             $cmdPad   = ' ' * [Math]::Max(1, $cmdWidth  - $cmd.Length)
-            Write-Host "    $aliases${gray}${aliasPad}${cmd}${cmdPad}${reset}$desc"
+            "    $aliases$($c.gray)$aliasPad$cmd$cmdPad$($c.reset)$desc"
         }
     }
-    Write-Host ""
+    ""
 }
+
+# Cheatsheets
+function global:aliases {
+    Show-ProfileAliases (Join-Path $script:RESDIR 'profile.d\10-ls.ps1')       'ls aliases'
+    Show-ProfileAliases (Join-Path $script:RESDIR 'profile.d\11-aliases.ps1')   'General aliases'
+    Show-ProfileAliases (Join-Path $script:RESDIR 'profile.d\80-functions.ps1') 'Functions'
+    ""
+}
+
+function global:gitaliases  { Show-YamlCheatsheet 'git'  'Git aliases' }
+
+function global:keybindings { Show-YamlCheatsheet 'keys' 'Key bindings' }
+Set-Alias -Name keys -Value keybindings
 
 function global:allaliases {
     aliases
     gitaliases
+    keybindings
 }
-Set-Alias -Name cheat -Value allaliases
+
+<#
+cheat is allaliases behind a pager -- the full set is ~200 lines, which
+would otherwise bury everything else in the scrollback. `less -R` (no -X,
+deliberately, unlike gl) draws on the alternate screen, so quitting leaves
+the terminal exactly as it was.
+#>
+function global:cheat {
+    $out = allaliases
+    if (Get-Command less -ErrorAction SilentlyContinue) {
+        try { $out | less -R }
+        catch { if ($_.Exception.Message -notmatch 'pipe') { throw } }   # quitting less early
+    } else {
+        $out | Out-Host -Paging
+    }
+}
 
 <#
 doctor reports which optional, tool-gated integrations are active right

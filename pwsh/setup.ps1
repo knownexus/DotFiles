@@ -1,4 +1,4 @@
-# Setup script — installs Git, Claude Code, and configures dotfiles + PATH
+﻿# Setup script — installs Git, Claude Code, and configures dotfiles + PATH
 
 # Install Git
 winget install --id Git.Git -e --source winget
@@ -11,10 +11,14 @@ $gitVim = "C:\Program Files\Git\usr\bin"
     "User"
 )
 
-# Copy vim dotfiles
-cp $PSScriptRoot\configs\.vimrc ~/.vimrc
-cp $PSScriptRoot\configs\.vim ~/.vim/
-cp $PSScriptRoot\configs\cheatsheet.txt ~/.vim/cheatsheet.txt
+# Point ~/.vimrc at the shared config (see shared/vim/) via a sourcing stub,
+# so editing the repo takes effect immediately instead of needing a re-copy.
+$sharedVim = Join-Path (Split-Path $PSScriptRoot -Parent) 'shared\vim\vimrc'
+$stub = '" Managed by dotfiles setup - edit shared/vim/vimrc, not this file.' + "`n" +
+        'source ' + ($sharedVim -replace '\\', '/') + "`n"
+New-Item -ItemType Directory -Force -Path ~/.vim/undodir | Out-Null
+[System.IO.File]::WriteAllText(
+    (Join-Path $HOME '.vimrc'), $stub, (New-Object System.Text.UTF8Encoding $false))
 
 # Install Claude Code
 irm https://claude.ai/install.ps1 | iex

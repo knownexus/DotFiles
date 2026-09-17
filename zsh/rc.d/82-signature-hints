@@ -128,6 +128,7 @@ _SIGHINT_SIGS=(
     wt-fix          "<ticket-id> <desc> [base]"
     wt-c            "<branch>"
     wt-setup        "-b <branch,...> [-n name] [-u clone-url] [-p path]"
+    wt-init         "-b <branch,...> [-n name] [-u clone-url] [-p path]"
     wt-workspace    "<path> <repo-url,...> <branch,...>"
     wt-default-base "[branch]"
     wt-repair       "[--all [root]]"
@@ -162,8 +163,8 @@ _SIGHINT_ALL_COMMANDS=(
     gru grpo giturl gitremote-reset remote!
     gri grim grd grm gro groi grod grof rebaseon rebase gitra gitrc groot
     grev grev-clean grev-scan
-    wt-go wt-list wt-feature wt-fix wt-c wt-done wt-done-f wt! wt-prune wt-repair wt-setup wt-workspace wt-default-base fix-fetch-refspecs
-    copy cheat repos-status trash-restore trash-empty remspace_dir wt-gof gitcf z zsh-doctor view
+    wt-go wt-list wt-feature wt-fix wt-c wt-done wt-done-f wt! wt-prune wt-repair wt-setup wt-init wt-workspace wt-default-base fix-fetch-refspecs
+    copy cheat aliases gitaliases allaliases keys keybindings repos-status trash-restore trash-empty remspace_dir wt-gof gitcf z zsh-doctor view
 )
 
 _sighint_compute() {

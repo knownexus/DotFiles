@@ -45,7 +45,11 @@
 
 ── VISUAL MODE ─────────────────────
   ctrl+v    column/block select
-  I         insert on all block lines
+  ctrl+q    same (if terminal eats ^V)
+  <space>v  same (always works)
+  I / A     insert / append on block
+  c         change block
+  r<char>   fill block with char
   gv        reselect last selection
   >  /  <   indent / dedent selection
 
@@ -77,7 +81,10 @@
   <space>w  save file
   <space>q  quit
   <space>h  clear search highlight
-  <space>?  toggle cheatsheet
+  <space>v  block (visual) select
+  <space>c  toggle cheatsheet
+  F1        toggle cheatsheet
+  q / ESC   close it (from inside)
 
 ── MARKS ───────────────────────────
   ma        set mark a

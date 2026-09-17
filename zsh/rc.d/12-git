@@ -131,9 +131,9 @@ alias gitca='git commit --amend'
 alias gitcm='git commit -m'
 alias uncommit='git reset --soft HEAD^'
 
-alias gdf='git diff'
-alias gdfs='git diff --staged'
-alias gdf1='git diff HEAD~1'
+gdf()  { git diff --color=always "$@" | less -R; }
+gdfs() { git diff --staged --color=always "$@" | less -R; }
+gdf1() { git diff HEAD~1 --color=always "$@" | less -R; }
 
 alias gitb='git branch'
 alias gitc='git checkout'
@@ -193,11 +193,12 @@ gl() {
 }
 alias gitl='gl'
 
-gl2() {
+_gl2_render() {
     local esc=$'\033'
     local reset="${esc}[0m" gray="${esc}[90m" green="${esc}[32m" red="${esc}[31m"
     _gl_log_header
     local pending_sha="" buffer=()
+    local f i d
     while IFS= read -r line; do
         # Detect a commit SHA line (may be preceded by ANSI escapes)
         if echo "$line" | grep -qP '(?:\x1b\[\d+m)*[0-9a-f]{40}'; then
@@ -210,7 +211,6 @@ gl2() {
         elif [[ "$line" == ">>END<<" ]]; then
             : # consumed
         elif echo "$line" | grep -qP '^\s*\d+ files? changed'; then
-            local f i d
             f=$(echo "$line" | grep -oP '^\s*\K\d+(?= file)')
             i=$(echo "$line" | grep -oP '\d+(?= insertion)' || echo "0")
             d=$(echo "$line" | grep -oP '\d+(?= deletion)'  || echo "0")
@@ -230,22 +230,27 @@ gl2() {
         '--date=format:%a %d/%m/%y %H:%M' \
         "$@")
 }
+
+gl2() { _gl2_render "$@" | less -R; }
 alias gitl2='gl2'
 
 # Graph log — tree on the left, compact detail on the right
-alias gitlg="git log --graph --abbrev-commit --decorate --all --color=always \
-    '--format=format:%C(bold blue)%h%C(reset)  %C(bold green)%<(14)%ar%C(reset)  %C(cyan)%<(20,trunc)%an%C(reset)  %s%C(bold yellow)%d%C(reset)'"
+gitlg() {
+    git log --graph --abbrev-commit --decorate --all --color=always \
+        '--format=format:%C(bold blue)%h%C(reset)  %C(bold green)%<(14)%ar%C(reset)  %C(cyan)%<(20,trunc)%an%C(reset)  %s%C(bold yellow)%d%C(reset)' \
+        "$@" | less -R
+}
 
 # Ultra-compact graph (hash + subject + refs only)
-alias gitlg2='git log --oneline --graph --decorate --all --color=always'
+gitlg2() { git log --oneline --graph --decorate --all --color=always "$@" | less -R; }
 
 # ---------------------------------------------------------------------------
 # Show
 # ---------------------------------------------------------------------------
-alias gs='git show'
-alias gits='git show'
-alias gitsn='git show --name-only'
-gsl() { git show --color=always "$@" | less -R; }
+gs()    { git show --color=always "$@" | less -R; }
+gits()  { git show --color=always "$@" | less -R; }
+gitsn() { git show --name-only --color=always "$@" | less -R; }
+gsl()   { git show --color=always "$@" | less -R; }
 
 # ---------------------------------------------------------------------------
 # Stash
@@ -536,6 +541,34 @@ wt-list() {
     git --git-dir="$gitdir" worktree list
 }
 
+# Resolves 'main'/'master' to whichever of the two this repo actually uses,
+# so naming either works in a repo that uses the other (main in a master-era
+# repo and vice versa). Prefers the name given when both exist, checks local
+# branches first then origin/, and hands back the input unchanged if neither
+# exists (new repo) or if it isn't main/master at all.
+# Usage: _wt_resolve_primary <branch> <git-locator...>
+#   e.g. _wt_resolve_primary main --git-dir="$gitdir"
+#        _wt_resolve_primary main -C "$git_root"
+_wt_resolve_primary() {
+    local branch="$1"; shift
+    local other
+    case "$branch" in
+        main)   other=master ;;
+        master) other=main ;;
+        *)      echo "$branch"; return 0 ;;
+    esac
+
+    local ns candidate
+    for ns in refs/heads refs/remotes/origin; do
+        for candidate in "$branch" "$other"; do
+            if git "$@" rev-parse --verify --quiet "$ns/$candidate" &>/dev/null; then
+                echo "$candidate"; return 0
+            fi
+        done
+    done
+    echo "$branch"
+}
+
 # Resolves the branch wt-feature/wt-fix should branch from when no base is
 # given explicitly: this repo's configured default (wt.default-base, set via
 # wt-default-base below), falling back to 'develop' if never configured.
@@ -552,8 +585,10 @@ wt-default-base() {
     local branch="$1" gitdir configured
     gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
     if [[ -n "$branch" ]]; then
-        git --git-dir="$gitdir" config wt.default-base "$branch"
-        echo "wt-feature/wt-fix will now default to '$branch' in this repo"
+        local resolved="$(_wt_resolve_primary "$branch" --git-dir="$gitdir")"
+        [[ "$resolved" != "$branch" ]] && echo "'$branch' → '$resolved' (this repo's primary branch)"
+        git --git-dir="$gitdir" config wt.default-base "$resolved"
+        echo "wt-feature/wt-fix will now default to '$resolved' in this repo"
     else
         configured=$(git --git-dir="$gitdir" config --get wt.default-base 2>/dev/null)
         if [[ -n "$configured" ]]; then
@@ -571,6 +606,9 @@ wt-feature() {
     root=$(_wt_project_root)
     gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
     base="${base:-$(_wt_default_base "$gitdir")}"
+    local resolved="$(_wt_resolve_primary "$base" --git-dir="$gitdir")"
+    [[ "$resolved" != "$base" ]] && echo "Base '$base' → '$resolved' (this repo's primary branch)"
+    base="$resolved"
     wtpath="$root/feature/$ticket-$desc"
     git --git-dir="$gitdir" worktree add "$wtpath" -b "feature/$ticket-$desc" "$base"
 }
@@ -582,6 +620,9 @@ wt-fix() {
     root=$(_wt_project_root)
     gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
     base="${base:-$(_wt_default_base "$gitdir")}"
+    local resolved="$(_wt_resolve_primary "$base" --git-dir="$gitdir")"
+    [[ "$resolved" != "$base" ]] && echo "Base '$base' → '$resolved' (this repo's primary branch)"
+    base="$resolved"
     wtpath="$root/fix/$ticket-$desc"
     git --git-dir="$gitdir" worktree add "$wtpath" -b "fix/$ticket-$desc" "$base"
 }
@@ -593,6 +634,9 @@ wt-c() {
     local root wtpath gitdir
     root=$(_wt_project_root)
     gitdir=$(_wt_gitdir) || { echo "Not a git repo or worktree workspace root." >&2; return 1; }
+    local resolved="$(_wt_resolve_primary "$branch" --git-dir="$gitdir")"
+    [[ "$resolved" != "$branch" ]] && echo "'$branch' → '$resolved' (this repo's primary branch)"
+    branch="$resolved"
     wtpath="$root/$branch"
     git --git-dir="$gitdir" worktree add "$wtpath" "$branch"
 }
@@ -716,6 +760,7 @@ wt-repair() {
 
 # Set up a multi-worktree workspace
 # Usage: wt-setup <branch,...> [repo-name] [clone-url] [parent-path]
+# Also available as wt-init (see alias below the function)
 wt-setup() {
     # NOTE: never name a local var "path" — it's a special zsh parameter
     # tied to $PATH; shadowing it with a scalar empties PATH for the rest
@@ -785,6 +830,11 @@ wt-setup() {
 
     echo "Workspace: $workspace_dir"
     for branch in "${branches[@]}"; do
+        local resolved="$(_wt_resolve_primary "$branch" -C "$git_root")"
+        if [[ "$resolved" != "$branch" ]]; then
+            echo "  [$branch] → '$resolved' (this repo's primary branch)"
+            branch="$resolved"
+        fi
         local safe_name="${branch//\//-}"
         local wtpath="$workspace_dir/$safe_name"
         if git -C "$git_root" rev-parse --verify "$branch" &>/dev/null; then
@@ -799,6 +849,9 @@ wt-setup() {
         fi
     done
 }
+
+# wt-init — alternative name for wt-setup
+alias wt-init='wt-setup'
 
 # Workspace — clone multiple repos each with their own worktrees
 # Usage: wt-workspace <path> <repo-url,...> <branch,...>

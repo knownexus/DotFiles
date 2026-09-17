@@ -1,12 +1,13 @@
 # Canonical command/alias data shared by the zsh and pwsh dotfiles.
-# Consumed by both shells' `aliases`/`gitaliases`/`cheat` functions so the
-# cheatsheet tables never drift out of sync between platforms again.
+# Consumed by both shells' `aliases`/`gitaliases`/`keybindings`/`cheat`
+# functions so the cheatsheet tables never drift out of sync between
+# platforms again.
 #
 # cmd is the underlying real command being wrapped/customized (omitted for
 # purely custom functions with no direct equivalent). desc is shown as-is on
-# both platforms; where behavior genuinely differs by OS (e.g. trash mechanism,
-# clipboard tool), a platform-specific override can replace desc/cmd via a
-# `zsh:`/`pwsh:` sub-block instead of the shared 'cmd'/'desc' keys.
+# both platforms. Where the two shells genuinely differ (mostly in the `keys`
+# group below), add `only: zsh` or `only: pwsh` to a row and the other
+# shell's loader filters it out; a row without `only` shows on both.
 
 general:
 - section: File system
@@ -158,8 +159,14 @@ general:
   - keys: copy
     desc: pipe stdin to the system clipboard (if installed)
     cmd: wl-copy/xclip/xsel
-  - keys: cheat  allaliases
-    desc: show this cheatsheet (aliases + gitaliases)
+  - keys: cheat
+    desc: full cheatsheet (aliases + gitaliases + keybindings), paged through less
+    cmd: (custom)
+  - keys: allaliases
+    desc: the same tables printed straight to the terminal, unpaged
+    cmd: (custom)
+  - keys: keys  keybindings
+    desc: just the key-bindings half of cheat (predictions, completion, editing)
     cmd: (custom)
   - keys: zsh-doctor
     desc: show which optional integrations (fzf, bat, ...) are active
@@ -188,11 +195,11 @@ git:
     desc: annotate each line with last-changing commit
     cmd: git blame
   - keys: gs  gits
-    desc: inspect a commit, tag, or blob
-    cmd: git show
+    desc: inspect a commit, tag, or blob, paged through less
+    cmd: git show | less
   - keys: gitsn
-    desc: list files changed in a commit
-    cmd: git show --name-only
+    desc: list files changed in a commit, paged through less
+    cmd: git show --name-only | less
   - keys: gsl
     desc: inspect a commit, paged
     cmd: git show | less
@@ -205,14 +212,14 @@ git:
     desc: pretty full log, scrollable via less
     cmd: git log
   - keys: gl2  gitl2
-    desc: full log with per-commit file-change counts
-    cmd: git log --shortstat
+    desc: full log with per-commit file-change counts, paged through less
+    cmd: git log --shortstat | less
   - keys: gitlg
-    desc: branching graph log
-    cmd: git log --graph
+    desc: branching graph log, paged through less
+    cmd: git log --graph | less
   - keys: gitlg2
-    desc: compact one-line graph log
-    cmd: git log --oneline --graph
+    desc: compact one-line graph log, paged through less
+    cmd: git log --oneline --graph | less
 - section: Staging
   commands:
   - keys: ga  gita
@@ -230,14 +237,14 @@ git:
 - section: Diff
   commands:
   - keys: gdf
-    desc: show unstaged changes
-    cmd: git diff
+    desc: show unstaged changes, paged through less
+    cmd: git diff | less
   - keys: gdfs
-    desc: show staged changes
-    cmd: git diff --staged
+    desc: show staged changes, paged through less
+    cmd: git diff --staged | less
   - keys: gdf1
-    desc: show changes introduced by the last commit
-    cmd: git diff HEAD~1
+    desc: show changes introduced by the last commit, paged through less
+    cmd: git diff HEAD~1 | less
 - section: Commit
   commands:
   - keys: gc
@@ -445,7 +452,7 @@ git:
   - keys: wt-repair [--all [root]]
     desc: fix stale worktree links after copying/syncing a workspace
     cmd: git worktree repair
-  - keys: wt-setup <branches>
+  - keys: wt-setup  wt-init <branches>
     desc: single-repo bare clone with branch worktrees
     cmd: (custom)
   - keys: wt-workspace <path> <repos> <branches>
@@ -454,3 +461,90 @@ git:
   - keys: fix-fetch-refspecs [root]
     desc: repair missing fetch refspecs across repos
     cmd: config + remote update
+
+# Key bindings rather than commands — rendered by both shells' `keybindings`
+# (aliased `keys`) and included in `cheat`. Entries carrying `only: pwsh` or
+# `only: zsh` are skipped by the other shell's loader; anything without an
+# `only` shows on both.
+keys:
+- section: Predictions
+  commands:
+  - keys: "→"
+    cmd: ForwardChar
+    desc: accept the whole inline suggestion (cursor at end of line)
+    only: pwsh
+  - keys: End  Ctrl+E
+    cmd: (custom)
+    desc: "accept the inline signature hint (else: end-of-line)"
+    only: zsh
+  - keys: "↑  ↓"
+    cmd: HistorySearch
+    desc: prefix-filtered history; also walks the ListView suggestions
+    only: pwsh
+  - keys: "↑  ↓"
+    cmd: history-beginning-search
+    desc: prefix-filtered history — only entries starting with what you typed
+    only: zsh
+  - keys: F2
+    cmd: SwitchPredictionView
+    desc: "switch the display: inline ghost text <-> grouped list"
+    only: pwsh
+  - keys: F4
+    cmd: ShowFullPredictionTooltip
+    desc: full tooltip for the selected list item
+    only: pwsh
+  - keys: Ctrl+Space
+    cmd: Switch-PredictionSource
+    desc: "cycle the source: History -> SignatureHints -> both (shown in the window title)"
+    only: pwsh
+  - keys: build-predictor
+    cmd: dotnet build
+    desc: rebuild the signature predictor and reload the profile
+    only: pwsh
+  - keys: sb
+    cmd: source rc
+    desc: reload the config after editing the signature-hint table
+    only: zsh
+- section: Completion
+  commands:
+  - keys: Tab  Shift+Tab
+    cmd: MenuComplete
+    desc: complete, or open the arrow-key-navigable menu
+    only: pwsh
+  - keys: Tab
+    cmd: complete-word
+    desc: complete the current word (no auto-menu)
+    only: zsh
+  - keys: Shift+Tab
+    cmd: menu-complete
+    desc: enter the arrow-key-navigable completion menu
+    only: zsh
+- section: Line editing
+  commands:
+  - keys: Ctrl+←  Ctrl+→
+    cmd: backward/forward-word
+    desc: move a word at a time
+  - keys: Ctrl+D
+    cmd: (custom)
+    desc: delete the char under the cursor; exit when the line is empty
+    only: pwsh
+  - keys: Ctrl+D
+    cmd: clever_logout_widget
+    desc: delete the char; else popd; exit only with an empty dir stack
+    only: zsh
+  - keys: Alt+H
+    cmd: ShowParameterHelp
+    desc: parameter help for the command on the line
+    only: pwsh
+  - keys: Alt+H
+    cmd: run-help
+    desc: man page for the command on the line
+    only: zsh
+  - keys: Ctrl+R  Ctrl+T
+    cmd: fzf
+    desc: fuzzy history search / file insert (needs PSFzf)
+    only: pwsh
+  - keys: Ctrl+R  Ctrl+T  Alt+C
+    cmd: fzf
+    desc: fuzzy history search / file insert / cd (needs fzf)
+    only: zsh

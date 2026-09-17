@@ -1,0 +1,8 @@
+# vim runtime state — undo history is per-machine, never shared
+.vim/undodir/
+*.un~
+*.swp
+*.swo
+
+# staging area for files Claude could not delete directly
+_to_delete/

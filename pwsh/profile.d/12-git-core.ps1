@@ -133,9 +133,9 @@ function global:gitcm  { git commit -m @args }
 function global:uncommit { git reset --soft HEAD^ }
 
 # Diff
-function global:gdf  { git diff @args }
-function global:gdfs { git diff --staged @args }
-function global:gdf1 { git diff HEAD~1 @args }
+function global:gdf  { git diff --color=always @args | less -R }
+function global:gdfs { git diff --staged --color=always @args | less -R }
+function global:gdf1 { git diff HEAD~1 --color=always @args | less -R }
 
 # Restore
 function global:gres   { git checkout -- @args }
@@ -146,9 +146,9 @@ function global:gress  { git restore --staged @args }
 function global:gitrmc { git rm --cached @args }
 
 # Show
-function global:gs    { git show @args }
-function global:gits  { git show @args }
-function global:gitsn { git show --name-only @args }
+function global:gs    { git show --color=always @args | less -R }
+function global:gits  { git show --color=always @args | less -R }
+function global:gitsn { git show --name-only --color=always @args | less -R }
 function global:gsl   { git show --color=always @args | less -R }
 
 # Reset — confirms before discarding uncommitted changes

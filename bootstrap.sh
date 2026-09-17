@@ -4,7 +4,9 @@
 # What it does:
 #   1. Symlinks ~/.resources -> <this repo>/zsh
 #   2. Makes sure ~/.zshrc sources ~/.resources/rc
-#   3. Installs everything this config uses so nothing has to be installed
+#   3. Deploys the shared vim config (~/.vimrc -> shared/vim/vimrc, plus the
+#      cheatsheet F1 opens) so vim behaves the same here as on Windows
+#   4. Installs everything this config uses so nothing has to be installed
 #      by hand afterward: git, yq (read at runtime by `aliases`/`gitaliases`/
 #      `cheat` for shared/commands.yaml), vim, less, tree, ripgrep, and the
 #      optional integrations (bat, glow, fzf, zoxide, direnv, notify-send,
@@ -51,7 +53,30 @@ else
     echo "    Added '$SOURCE_LINE' to ~/.zshrc"
 fi
 
-# --- 3. Install everything this config uses -----------------------------------
+# --- 3. vim config -------------------------------------------------------------
+# Symlinked, not copied, so edits to the repo take effect straight away. The
+# vimrc finds cheatsheet.txt next to itself through the resolved symlink, so
+# there is no second copy to drift.
+VIMRC_SRC="$REPO_DIR/shared/vim/vimrc"
+VIMRC_LINK="$HOME/.vimrc"
+
+echo "==> Deploying vim config from $VIMRC_SRC"
+if [ -L "$VIMRC_LINK" ] && [ "$(readlink -f "$VIMRC_LINK")" = "$VIMRC_SRC" ]; then
+    echo "    ~/.vimrc already points here — skipping"
+else
+    if [ -e "$VIMRC_LINK" ]; then
+        backup="$VIMRC_LINK.bak.$$"
+        echo "    ~/.vimrc already exists — moving it to $backup"
+        mv "$VIMRC_LINK" "$backup"
+    fi
+    ln -s "$VIMRC_SRC" "$VIMRC_LINK"
+fi
+echo "    ~/.vimrc -> $VIMRC_SRC"
+
+mkdir -p "$HOME/.vim/undodir"
+echo "    cheatsheet read from the repo (F1 or <space>c toggles it)"
+
+# --- 4. Install everything this config uses -----------------------------------
 PKG_MANAGER=""
 if command -v dnf >/dev/null 2>&1; then PKG_MANAGER=dnf
 elif command -v apt-get >/dev/null 2>&1; then PKG_MANAGER=apt
@@ -106,7 +131,7 @@ if [ "$PKG_MANAGER" = "apt" ] || [ "$PKG_MANAGER" = "dnf" ]; then
     fi
 fi
 
-# --- 4. Final report -----------------------------------------------------------
+# --- 5. Final report -----------------------------------------------------------
 echo ""
 echo "==> Tooling status:"
 for tool in git yq vim less tree rg fzf bat glow zoxide direnv notify-send wl-copy xclip xsel; do

@@ -23,7 +23,8 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         // Search
         "g", "g1", "g2", "rgs", "rgs1", "rgs2", "fch", "fchs", "psgrep", "which",
         // Shell
-        "sb", "r", "c", "fr", "path", "brk", "aliases", "gitaliases", "allaliases", "cheat", "doctor",
+        "sb", "r", "c", "fr", "path", "brk", "aliases", "gitaliases", "allaliases", "cheat",
+        "keys", "keybindings", "doctor",
         "build-predictor", "compreload",
         // SSH
         "ssh", "ssx",
@@ -60,7 +61,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "rs", "update", "updated",
         // Git — worktree
         "wt-go", "wt-gof", "wt-list", "wt-feature", "wt-fix", "wt-c", "gitcf",
-        "wt-done", "wt-done-f", "wt!", "wt-prune", "wt-setup", "wt-workspace", "wt-default-base", "fix-fetch-refspecs",
+        "wt-done", "wt-done-f", "wt!", "wt-prune", "wt-setup", "wt-init", "wt-workspace", "wt-default-base", "fix-fetch-refspecs",
     };
 
     private static string[]? GetSig(string cmd) => cmd switch
@@ -160,11 +161,11 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "wt-feature"                => new[] { "<ticket-id>", "<desc>", "[-Base <branch>]" },
         "wt-fix"                    => new[] { "<ticket-id>", "<desc>", "[-Base <branch>]" },
         "wt-c"                      => new[] { "<branch>" },
-        "wt-setup"                  => new[] { "<branches>", "[-Name <n>]", "[-CloneUrl <url>]" },
+        "wt-setup" or "wt-init"     => new[] { "<branches>", "[-Name <n>]", "[-CloneUrl <url>]" },
         "wt-workspace"              => new[] { "-Path", "<path>", "-Repos", "<url,...>", "-Branches", "<branch,...>" },
         "wt-default-base"           => new[] { "[branch]" },
         "fix-fetch-refspecs"        => new[] { "[root]" },
-        // wt-gof, gitcf, copy, cheat, doctor, c, .., ..., .... take no arguments — no entry needed
+        // wt-gof, gitcf, copy, cheat, keys, doctor, c, .., ..., .... take no arguments — no entry needed
 
         _                           => null,
     };

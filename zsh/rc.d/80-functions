@@ -116,8 +116,12 @@ _load_cheat_entries() {
     # expansion — pre-assigning it to a variable first works around that.
     local TAB=$'\t' US=$'\x1f'
     for sec in "${sections[@]}"; do
+        # Rows marked `only: pwsh` describe the other shell's bindings
+        # (the key tables genuinely differ) — skip them here, and skip the
+        # section header too if that leaves the section empty.
+        rows=(${(f)"$(yq -r ".${group}[$i].commands[] | select((.only // \"zsh\") == \"zsh\") | [.keys, .cmd, .desc] | @tsv" "$yaml" 2>/dev/null)"})
+        (( ${#rows[@]} == 0 )) && { (( i++ )); continue }
         print -- "SECTION"$'\x1f'"$sec"
-        rows=(${(f)"$(yq -r ".${group}[$i].commands[] | [.keys, .cmd, .desc] | @tsv" "$yaml" 2>/dev/null)"})
         for row in "${rows[@]}"; do
             print -- "${row//$TAB/$US}"
         done
@@ -135,9 +139,28 @@ gitaliases() {
     _print_alias_cheatsheet "Git aliases" "${e[@]}"
 }
 
+keybindings() {
+    local -a e=(${(f)"$(_load_cheat_entries keys)"})
+    _print_alias_cheatsheet "Key bindings" "${e[@]}"
+}
+alias keys='keybindings'
+
 allaliases() {
     aliases
     gitaliases
+    keybindings
+}
+
+# cheat is allaliases behind a pager — the full set is ~200 lines, which
+# would otherwise bury everything else in the scrollback. `less -R` (no -X,
+# unlike gl/gsl) draws on the alternate screen, so quitting leaves the
+# terminal exactly as it was.
+cheat() {
+    if (( ${+commands[less]} )); then
+        allaliases | less -R
+    else
+        allaliases
+    fi
 }
 
 # ---------------------------------------------------------------------------

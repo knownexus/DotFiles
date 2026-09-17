@@ -1,0 +1,181 @@
+" ===========================================================================
+" Cross-platform vimrc — deployed to ~/.vimrc by bootstrap.sh (Linux/macOS)
+" and bootstrap.ps1 / setup.ps1 (Windows).
+"
+" KEEP THIS FILE LF-ONLY. Unix vim does not strip carriage returns from a
+" vimrc, so a CRLF copy fails on every single line (E474/E488/E539...).
+" .gitattributes in this directory pins it to LF on checkout.
+" ===========================================================================
+
+set nocompatible
+
+" Having a ~/.vimrc stops vim loading its own defaults.vim, so everything
+" that file would have given us has to be set explicitly below.
+
+" --- Encoding --------------------------------------------------------------
+set encoding=utf-8
+scriptencoding utf-8
+set fileformats=unix,dos
+
+" --- Display ---------------------------------------------------------------
+set background=dark
+set number
+set ruler
+set laststatus=2
+set showcmd
+set showmatch
+set wildmenu
+set wildmode=longest:full,full
+set scrolloff=8
+set sidescrolloff=8
+set cursorline
+set splitright
+set splitbelow
+set display=lastline
+set lazyredraw
+set ttyfast
+
+syntax enable
+filetype plugin indent on
+
+" True colour where the terminal actually supports it, 256-colour otherwise.
+" Windows Terminal / ConHost on Win10+ and mintty both handle it; a bare
+" TERM=xterm over ssh often does not, and forcing it there washes colours out.
+if has('termguicolors') && (has('win32') || $COLORTERM ==# 'truecolor' || $COLORTERM ==# '24bit')
+    set termguicolors
+else
+    set t_Co=256
+endif
+highlight CursorLine cterm=NONE ctermbg=237 guibg=#3a3a3a
+
+" --- Indentation -----------------------------------------------------------
+" tabstop/softtabstop/shiftwidth all agree, so Tab, >> and autoindent move by
+" the same amount. filetype indent (above) replaces the old smartindent,
+" which mis-indents Python, YAML and anything non-C-like.
+set tabstop=4
+set softtabstop=4
+set shiftwidth=4
+set expandtab
+set autoindent
+set shiftround
+
+" --- Editing ---------------------------------------------------------------
+set backspace=indent,eol,start
+set history=1000
+set mouse=a
+set hidden
+set confirm
+set nrformats-=octal
+
+" --- Search ----------------------------------------------------------------
+" smartcase only does anything with ignorecase on: together they give
+" case-insensitive search until the pattern contains a capital.
+set incsearch
+set hlsearch
+set ignorecase
+set smartcase
+
+" --- Clipboard -------------------------------------------------------------
+" unnamedplus is the X11/Wayland CLIPBOARD selection (what Ctrl+V pastes);
+" unnamed is the * register, which is what Windows and macOS use.
+if has('clipboard')
+    if has('unnamedplus')
+        set clipboard=unnamedplus
+    else
+        set clipboard=unnamed
+    endif
+endif
+
+" --- Undo ------------------------------------------------------------------
+" undofile silently does nothing if undodir does not exist, so create it.
+let s:undodir = expand('~/.vim/undodir')
+if !isdirectory(s:undodir)
+    call mkdir(s:undodir, 'p', 0700)
+endif
+let &undodir = s:undodir
+set undofile
+set undolevels=1000
+
+" --- Cursor shape ----------------------------------------------------------
+let &t_SI = "\e[6 q"        " thin line in insert mode
+let &t_EI = "\e[2 q"        " block in normal mode
+
+" --- Cheatsheet ------------------------------------------------------------
+" Look for the cheatsheet next to this vimrc first (resolve() follows the
+" ~/.vimrc symlink on Linux; on Windows ~/.vimrc is a stub that sources the
+" repo copy, so <sfile> lands in the repo either way). ~/.vim is the fallback
+" for a hand-copied install.
+let s:vimrc_dir  = fnamemodify(resolve(expand('<sfile>:p')), ':h')
+let s:cheatsheet = s:vimrc_dir . '/cheatsheet.txt'
+if !filereadable(s:cheatsheet)
+    let s:cheatsheet = expand('~/.vim/cheatsheet.txt')
+endif
+
+function! s:CheatsheetWinnr() abort
+    let l:bufnr = bufnr(s:cheatsheet)
+    return l:bufnr == -1 ? -1 : bufwinnr(l:bufnr)
+endfunction
+
+function! ToggleCheatsheet() abort
+    let l:win = s:CheatsheetWinnr()
+    if l:win != -1
+        execute l:win . 'wincmd c'
+        return
+    endif
+    if !filereadable(s:cheatsheet)
+        echohl WarningMsg
+        echomsg 'Cheatsheet not installed: ' . s:cheatsheet
+        echohl None
+        return
+    endif
+    execute 'vsplit ' . fnameescape(s:cheatsheet)
+    vertical resize 50
+    setlocal nomodifiable buftype=nofile bufhidden=wipe nobuflisted
+    " q / Esc close it from inside, so you never have to remember the
+    " toggle key twice or reach for :q with the wrong window focused.
+    nnoremap <buffer><silent> q     :close<CR>
+    nnoremap <buffer><silent> <Esc> :close<CR>
+    wincmd p
+endfunction
+
+" augroup + autocmd! so re-sourcing this file replaces these rather than
+" stacking a second copy of each.
+augroup cheatsheet
+    autocmd!
+    " Don't let the cheatsheet keep vim alive on :q, or sit there alone.
+    autocmd QuitPre * if s:CheatsheetWinnr() != -1 | execute s:CheatsheetWinnr() . 'wincmd c' | endif
+    autocmd WinEnter * if winnr('$') == 1 && bufnr('%') == bufnr(s:cheatsheet) | quit | endif
+augroup END
+
+" --- Mappings --------------------------------------------------------------
+let mapleader = " "
+nnoremap <leader>w :write<CR>
+nnoremap <leader>q :quit<CR>
+nnoremap <leader>h :nohlsearch<CR>
+" Cheatsheet: F1 is one keypress and already means "help" everywhere, so it
+" is the primary binding (vim's own F1 -> :help is remapped away). <space>c is
+" the mnemonic alternative for keyboards that bury the function row.
+nnoremap <silent> <F1>        :call ToggleCheatsheet()<CR>
+xnoremap <silent> <F1>   <Esc>:call ToggleCheatsheet()<CR>
+inoremap <silent> <F1>   <C-o>:call ToggleCheatsheet()<CR>
+" vim treats <Help> as a second name for the same key and maps it to :help
+" independently, so it has to be overridden too or help still wins.
+nnoremap <silent> <Help>      :call ToggleCheatsheet()<CR>
+xnoremap <silent> <Help> <Esc>:call ToggleCheatsheet()<CR>
+inoremap <silent> <Help> <C-o>:call ToggleCheatsheet()<CR>
+" If the terminal sends a sequence vim has no F1 code for, the mapping never
+" matches and the built-in help wins. \e O P is what mintty, Windows Terminal
+" and xterm send; teach vim that only when it has nothing already.
+if !has('gui_running') && &term !=# 'win32' && &t_k1 ==# ''
+    execute "set <F1>=\<Esc>OP"
+endif
+nnoremap <silent> <leader>c   :call ToggleCheatsheet()<CR>
+
+" Blockwise visual mode. Windows terminals swallow Ctrl+V for paste before
+" vim ever sees it, so bind two fallbacks: Ctrl+Q (the traditional one — needs
+" `stty -ixon` in Git Bash, where it is otherwise XON flow control) and
+" <leader>v, which nothing else can intercept.
+nnoremap <C-q> <C-v>
+xnoremap <C-q> <C-v>
+nnoremap <leader>v <C-v>
+xnoremap <leader>v <C-v>

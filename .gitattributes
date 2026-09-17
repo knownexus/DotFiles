@@ -1,0 +1,25 @@
+# Repo-wide line-ending policy.
+#
+# Everything here is consumed by shells and editors that are unforgiving about
+# carriage returns: a CRLF .vimrc fails on every line under Unix vim, CRLF
+# breaks PowerShell here-strings, and `sh` chokes on `\r` at the end of a
+# command. So: normalise to LF in the index AND check out LF on every
+# platform, including Windows, regardless of core.autocrlf.
+#
+# text=auto still lets git detect binaries and leave them untouched.
+* text=auto eol=lf
+
+# Belt and braces for the files where CRLF is actively harmful.
+*.sh        text eol=lf
+*.ps1       text eol=lf
+*.psm1      text eol=lf
+*.psd1      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+
+# Explicitly binary — never touch these.
+*.dll       binary
+*.pdb       binary
+*.png       binary
+*.jpg       binary
+*.ico       binary

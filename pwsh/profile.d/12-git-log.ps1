@@ -50,7 +50,7 @@ function global:gl {
         git log --color=always `
             '--format=tformat:%C(yellow)%H%C(reset)%C(auto)%d%C(reset)%n%C(brightblack)%an <%ae>  %ad%C(reset)%n%n%C(249)%w(0,4,4)%B%C(reset)' `
             '--date=format:%a %d/%m/%y %H:%M' `
-            @args | less -RX
+            @args | less -R
     } catch {
         if ($_.Exception.Message -notmatch 'pipe') { throw }
     }
@@ -95,7 +95,7 @@ function global:gl2 {
             } else {
                 if ($pendingSha) { $buffer.Add($_) } else { $_ }
             }
-        } | less -RX
+        } | less -R
     } catch {
         if ($_.Exception.Message -notmatch 'pipe') { throw }
     }
@@ -108,7 +108,7 @@ function global:gitlg {
     try {
         git log --graph --abbrev-commit --decorate --all --color=always `
             "--format=format:%C(bold blue)%h%C(reset)  %C(bold green)%<(14)%ar%C(reset)  %C(cyan)%<(20,trunc)%an%C(reset)  %s%C(bold yellow)%d%C(reset)" `
-            @args | less -RX
+            @args | less -R
     } catch {
         if ($_.Exception.Message -notmatch 'pipe') { throw }
     }
@@ -116,5 +116,10 @@ function global:gitlg {
 
 # Ultra-compact graph (hash + subject + refs only)
 function global:gitlg2 {
-    git log --oneline --graph --decorate --all --color=always @args
+    if (-not (Assert-GitRepo)) { return }
+    try {
+        git log --oneline --graph --decorate --all --color=always @args | less -R
+    } catch {
+        if ($_.Exception.Message -notmatch 'pipe') { throw }
+    }
 }

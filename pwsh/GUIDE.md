@@ -11,7 +11,8 @@ in-shell version of the alias tables, run `cheat` any time.
 > a bug report waiting to happen rather than an intentional design.
 
 **Contents:** shell settings · prompt · safety changes · new commands ·
-git additions · optional tool integrations · sig-predictor · not ported
+git additions · key bindings · optional tool integrations · sig-predictor ·
+not ported
 
 ---
 
@@ -86,8 +87,9 @@ git additions · optional tool integrations · sig-predictor · not ported
 
 | Command | What it does |
 |---|---|
-| `cheat` | Full alias/command cheatsheet (alias for `allaliases`) |
-| `aliases` / `gitaliases` | Just the general or just the git half of `cheat` |
+| `cheat` | Full alias/command cheatsheet, paged through `less` |
+| `aliases` / `gitaliases` / `keys` | Just one of the three tables, unpaged |
+| `allaliases` | All three tables at once, unpaged |
 | `doctor` | Reports which optional integrations are active right now |
 | `copy` | Pipes input to the system clipboard (`Set-Clipboard`) |
 | `view <file>` | Read-only viewer — see below |
@@ -125,6 +127,40 @@ Two real fixes came back the other way:
 > command via `--git-dir`. This bug actually originated *here* — the
 > zsh side inherited it from this file, and it was found and fixed
 > there first via a real bug report, then ported back.
+>
+> **`main` vs `master`** — wherever one of those two is named, whichever
+> the repo actually has is used instead: ask for `main` in a `master`
+> repo (or `master` in a `main` one) and you get the branch that exists.
+> Applies to `wt-setup`/`wt-init` branch lists, `wt-feature`/`wt-fix`
+> `-Base`, `wt-c`, and `wt-default-base` (which stores the resolved
+> name). Local branches are checked before `origin/`, the name you typed
+> wins if both exist, and it's passed through untouched if neither does
+> yet. Shared with the zsh side as `Resolve-WtPrimaryBranch` /
+> `_wt_resolve_primary`.
+
+## Key bindings
+
+| Key | Action |
+|---|---|
+| `Ctrl+→` / `Ctrl+←` | Word-forward / word-backward |
+| `↑` / `↓` | Prefix-aware history search — and walks the ListView suggestions |
+| `→` | Accept the whole inline suggestion (cursor at end of line) |
+| `F2` | Switch the prediction display: inline ghost text ↔ grouped list |
+| `F4` | Full tooltip for the selected list item |
+| `Ctrl+Space` | Cycle the prediction source — see sig-predictor below |
+| `Alt+H` | Parameter help for the command on the line |
+| `Tab` / `Shift+Tab` | Complete, or open the arrow-key-navigable menu |
+| `Ctrl+D` | Delete the char under the cursor; exit when the line is empty |
+| `Ctrl+R` / `Ctrl+T` *(PSFzf)* | Fuzzy history / file-insert |
+
+> **↑/↓** only filter by what you've already typed — type `git` then
+> press `↑` to cycle just `git ...` history, not the full unfiltered
+> list. `F2`, `F4` and the arrow-key accept are PSReadLine's own
+> bindings; the rest are set in `81-key-bindings.ps1` /
+> `50-completions.ps1`.
+
+> This table is also live in-shell: run `keys` (or `keybindings`) for
+> just it, or `cheat` for everything.
 
 ## Optional tool integrations (gated on being installed)
 
@@ -146,6 +182,13 @@ activates automatically. Run `doctor` any time to see what's live.
 `sig-predictor/SignatureHintPredictor.cs` has all the new commands
 added to its argument-hint table (`copy`, `view`, `cheat`, `doctor`,
 `repos-status`, `trash-restore`, `gsl`, `wt-gof`, `gitcf`, etc.).
+
+Predictions come from two sources at once (`HistoryAndPlugin`), shown as
+separate, labelled groups in PSReadLine's ListView. When one source
+crowds the other out for a prefix, `Ctrl+Space` cycles which is live:
+History only → SignatureHints only → both, with the current mode shown
+in the window title until the next prompt redraw. `F2` switches between
+that list and plain inline ghost text.
 
 > **This needs a rebuild to take effect** — run `build-predictor` (or
 > `dotnet build sig-predictor -c Release`) and reload the profile. Like

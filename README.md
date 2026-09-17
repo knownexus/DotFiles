@@ -10,9 +10,11 @@ dotfiles/
   bootstrap.sh      # deploy the zsh side (Linux/Mac)
   bootstrap.ps1     # deploy the pwsh side (Windows)
   shared/
-    commands.yaml   # single source of truth for the git-aliases cheatsheet,
-                     # read by both sides at runtime via yq — no more hand-
-                     # copying a table between two repos every time it changes
+    commands.yaml   # single source of truth for the git-aliases and key-
+                     # bindings cheatsheets, read by both sides at runtime via
+                     # yq — no more hand-copying tables between two repos every
+                     # time they change (rows marked `only: zsh`/`only: pwsh`
+                     # cover the places the two genuinely differ)
   zsh/              # zsh config — see zsh/GUIDE.md
   pwsh/             # pwsh config — see pwsh/GUIDE.md
 ```
@@ -20,7 +22,8 @@ dotfiles/
 Each shell's *implementation* stays separate — a zsh function and its pwsh
 equivalent are genuinely different code, and porting one into the other
 wouldn't make either simpler. What's shared is the *data* that used to drift
-out of sync between hand-maintained copies: the git-aliases cheatsheet table.
+out of sync between hand-maintained copies: the git-aliases and key-bindings
+cheatsheet tables.
 
 ## Setup
 

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # Deploys the pwsh side of this dotfiles monorepo on Windows.
 #
 # NOTE: written and reviewed, but never actually run — this environment has
@@ -17,8 +17,10 @@
 #      user PATH — that one install covers the Unix tools this config's
 #      aliases assume, instead of chasing down separate winget packages for
 #      each of them
-#   4. Installs the optional PowerShell modules (PSFzf, BurntToast)
-#   5. Reports what's available at the end
+#   4. Deploys the shared vim config (~/.vimrc from shared/vim/vimrc, plus the
+#      cheatsheet <space>? opens) so vim behaves the same here as on Linux
+#   5. Installs the optional PowerShell modules (PSFzf, BurntToast)
+#   6. Reports what's available at the end
 #
 # Safe to re-run.
 
@@ -116,7 +118,33 @@ if ($gitUsrBin) {
     Write-Host "    Couldn't find Git for Windows' usr\bin -- install Git for Windows first"
 }
 
-# --- 4. Optional PowerShell modules --------------------------------------------
+# --- 4. vim config -------------------------------------------------------------
+# ~/.vimrc is written as a one-line stub that sources the repo copy, rather
+# than a copy of it. A copy goes stale the moment shared/vim/vimrc is edited
+# and you then spend ten minutes wondering why a new mapping "doesn't work";
+# the stub means the repo file IS the live config, matching the symlink
+# bootstrap.sh makes on Linux. (A real symlink would need Developer Mode or
+# an elevated shell, which this script deliberately does not require.)
+$vimSrc  = Join-Path $repoDir 'shared\vim\vimrc'
+$vimDest = Join-Path $HOME '.vimrc'
+# vim wants forward slashes in a :source path.
+$stub    = '" Managed by dotfiles bootstrap - edit shared/vim/vimrc, not this file.' + "`n" +
+           'source ' + ($vimSrc -replace '\\', '/') + "`n"
+
+Write-Host "==> Pointing ~/.vimrc at $vimSrc"
+if ((Test-Path $vimDest) -and ((Get-Content $vimDest -Raw) -ne $stub)) {
+    $existing = Get-Content $vimDest -Raw
+    if ($existing -notmatch [regex]::Escape('shared/vim/vimrc')) {
+        Copy-Item $vimDest "$vimDest.bak.$(Get-Date -Format yyyyMMddHHmmss)"
+        Write-Host "    Backed up the existing ~/.vimrc"
+    }
+}
+# LF, no BOM - this file is sourced by vim, which is unforgiving about both.
+[System.IO.File]::WriteAllText($vimDest, $stub.Replace("`r`n", "`n"), (New-Object System.Text.UTF8Encoding $false))
+New-Item -ItemType Directory -Force -Path (Join-Path $HOME '.vim\undodir') | Out-Null
+Write-Host "    ~/.vimrc sources the repo; edits to shared/vim/vimrc are live in the next vim"
+
+# --- 5. Optional PowerShell modules --------------------------------------------
 foreach ($mod in @('PSFzf', 'BurntToast')) {
     if (Get-Module -ListAvailable -Name $mod) {
         Write-Host "    $mod (module): found"
@@ -126,7 +154,7 @@ foreach ($mod in @('PSFzf', 'BurntToast')) {
     }
 }
 
-# --- 5. Final report -------------------------------------------------------
+# --- 6. Final report -------------------------------------------------------
 Write-Host ""
 Write-Host "==> Tooling status:"
 foreach ($cmd in @('git', 'yq', 'rg', 'fzf', 'bat', 'glow', 'zoxide', 'direnv', 'vim', 'less')) {

@@ -97,8 +97,9 @@ knowing about explicitly.
 
 | Command | What it does |
 |---|---|
-| `cheat` | Full alias/command cheatsheet (alias for `allaliases`) |
-| `aliases` / `gitaliases` | Just the general or just the git half of `cheat` |
+| `cheat` | Full alias/command cheatsheet, paged through `less` |
+| `aliases` / `gitaliases` / `keys` | Just one of the three tables, unpaged |
+| `allaliases` | All three tables at once, unpaged |
 | `zsh-doctor` | Reports which optional integrations are active right now |
 | `copy` | Pipes stdin to the system clipboard |
 | `view <file>` | Read-only viewer — see below |
@@ -123,11 +124,19 @@ knowing about explicitly.
 | `grev <A> <B>` | Shows what A changed that B later undid |
 | `grev-clean <A> <B>` | Rewrites A to strip what B reverted — see below |
 | `grev-scan [range]` | Same idea, scanned across a whole commit range |
-| `wt-setup -b <branches>` | Bare-clone + branch-worktree setup, one repo |
+| `wt-setup -b <branches>` / `wt-init` | Bare-clone + branch-worktree setup, one repo |
 | `wt-workspace <path> <urls> <branches>` | Same, across multiple repos |
 | `wt-gof` *(fzf)* | Fuzzy-pick a worktree and `cd` to it |
 | `gitcf` *(fzf)* | Fuzzy-pick a branch and check it out |
 | `wt-repair [--all [root]]` | Fix stale worktree links — see below |
+
+> **`main` vs `master`** — wherever one of those two is named, whichever
+> the repo actually has is used instead: ask for `main` in a `master`
+> repo (or `master` in a `main` one) and you get the branch that exists.
+> Applies to `wt-setup`/`wt-init` branch lists, `wt-feature`/`wt-fix`
+> bases, `wt-c`, and `wt-default-base`. Local branches are checked before
+> `origin/`, the name you typed wins if both exist, and it's passed
+> through untouched if neither does yet.
 
 > **`wt-repair`** fixes the "`prunable gitdir file points to non-existent
 > location`" situation that comes from copying/syncing a `wt-setup`/
@@ -156,12 +165,17 @@ There are ~90 git aliases in total — run `gitaliases` for the full list.
 | `↑` / `↓` | Prefix-aware history search |
 | `End` / `Ctrl+E` | Accept the current inline hint (else: end-of-line) |
 | `Alt+H` | Jump to the man page for the command on the line |
+| `Tab` | Complete the current word (no auto-menu) |
 | `Shift+Tab` | Enter the arrow-key-navigable completion menu |
+| `Ctrl+D` | Delete the char under the cursor; else `popd`; else exit |
 | `Ctrl+R` / `Ctrl+T` / `Alt+C` *(fzf)* | Fuzzy history / file-insert / cd |
 
 > **↑/↓** only filter by what you've already typed — type `git` then
 > press `↑` to cycle just `git ...` history, not the full unfiltered
 > list.
+
+> This table is also live in-shell: run `keys` (or `keybindings`) for
+> just it, or `cheat` for everything.
 
 ## Optional tool integrations (gated on being installed)
 
