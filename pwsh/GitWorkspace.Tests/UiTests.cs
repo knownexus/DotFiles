@@ -90,6 +90,8 @@ static partial class Tests
             var review = new ScriptedSurface(100, 30, new Input(ConsoleKey.Enter));
             Check(new Dialogs(review).Review("Diff", "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n"), "Review accepts");
             Check(review.Frames[0].Contains("+ y") && review.Frames[0].Contains("− x"), "Review renders diff sides");
+            var reviewOutside = new ScriptedSurface(80, 24, new Input(X: 0, Y: 0, Button: MouseButton.Left));
+            Check(!new Dialogs(reviewOutside).Review("Diff", "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n"), "Click outside closes Review");
         });
         Test("main screen uses status letters and registers row, checkbox and view hits", () => {
             var view = new WorkspaceView(Demo.Settings(), new()); view.Update(Demo.Snapshot());

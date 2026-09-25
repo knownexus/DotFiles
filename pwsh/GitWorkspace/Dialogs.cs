@@ -141,7 +141,7 @@ public sealed partial class Dialogs(ISurface terminal)
             scroll = Math.Clamp(scroll, 0, Math.Max(0, lines.Count - count));
             Styled.Draw(c, inner, lines, scroll);
             terminal.Draw(c); var key = terminal.Read();
-            if (Cancel(key)) return false;
+            if (Cancel(key) || Outside(key, inner)) return false;
             if (key.Key == ConsoleKey.Enter) return confirm;
             if (key.Key == ConsoleKey.UpArrow) scroll--;
             if (key.Key == ConsoleKey.DownArrow) scroll++;
