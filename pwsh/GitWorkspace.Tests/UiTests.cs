@@ -35,5 +35,17 @@ static partial class Tests
             Check(MouseDecoder.Decode(1, 2, 1, 1, ref previous)?.DoubleClick == true, "Double click");
             Equal(-3, MouseDecoder.Decode(unchecked((uint)(120 << 16)), 4, 1, 1, ref previous)?.Wheel, "Wheel up");
         });
+        Test("canvas boxes clip safely, dim a copy and styled diff lines fill their row", () => {
+            var c = new Canvas(30, 8); c.Text(0, 0, "BACKDROP");
+            var copy = c.Clone(); copy.Dim(); Equal(Ink.Gutter, copy.InkAt(0, 0), "Dimmed copy"); Equal(Ink.Text, c.InkAt(0, 0), "Original untouched");
+            copy.Box(new Rect(2, 1, 12, 4), "Title");
+            var lines = copy.Plain().Split(Environment.NewLine);
+            Check(lines[1].StartsWith("  ┌─ Title ──┐"), "Top border: " + lines[1]); Check(lines[4].StartsWith("  └──────────┘"), "Bottom border");
+            Check(lines[2].Substring(3, 10).Trim().Length == 0, "Interior cleared");
+            new Canvas(5, 2).Box(new Rect(-3, -3, 40, 40), "x"); new Canvas(5, 2).Box(new Rect(0, 0, 1, 1)); // no exception
+            var styled = new Canvas(20, 3); Styled.Draw(styled, new Rect(0, 0, 20, 3), [new("+ a", Ink.Added), new("plain", Ink.Text)], 0);
+            Equal(Ink.Added, styled.InkAt(19, 0), "Added background spans the row");
+            Equal(3, Styled.FromText("a\r\nb\nc").Count, "Text lines");
+        });
     }
 }

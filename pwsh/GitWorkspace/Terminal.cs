@@ -117,7 +117,7 @@ public sealed class Terminal : ISurface, IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool ReadConsoleInputW(IntPtr handle, out Record buffer, uint length, out uint read);
 }
 
-public enum Ink { Text, Muted, Accent, Good, Warning, Bad, Heading }
+public enum Ink { Text, Muted, Accent, Good, Warning, Bad, Heading, Added, Removed, Hunk, Gutter, Ref, Border }
 public sealed class Canvas(int width, int height)
 {
     readonly char[,] chars = new char[height, width];
@@ -134,6 +134,26 @@ public sealed class Canvas(int width, int height)
     }
     public void Line(int y, int start = 0, int? length = null) => Text(start, y, new string('─', Math.Max(0, Math.Min(length ?? width, width - start))), Ink.Muted);
     public void Fill(int x, int y, int length, bool highlight = true) => Text(x, y, new string(' ', Math.Max(0, length)), Ink.Text, length, highlight);
+    public Ink InkAt(int x, int y) => inks[y, x];
+    public Canvas Clone()
+    {
+        var copy = new Canvas(width, height);
+        Array.Copy(chars, copy.chars, chars.Length); Array.Copy(inks, copy.inks, inks.Length); Array.Copy(highlights, copy.highlights, highlights.Length);
+        return copy;
+    }
+    // Popups draw over a dimmed copy of the last frame so the user keeps their context.
+    public void Dim()
+    {
+        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) { inks[y, x] = Ink.Gutter; highlights[y, x] = false; }
+    }
+    public void Box(Rect area, string? title = null)
+    {
+        if (area.Width < 2 || area.Height < 2) return;
+        Text(area.X, area.Y, "┌" + new string('─', area.Width - 2) + "┐", Ink.Border);
+        for (int y = area.Y + 1; y < area.Bottom - 1; y++) { Text(area.X, y, "│" + new string(' ', area.Width - 2) + "│", Ink.Border); }
+        Text(area.X, area.Bottom - 1, "└" + new string('─', area.Width - 2) + "┘", Ink.Border);
+        if (!string.IsNullOrEmpty(title)) Text(area.X + 2, area.Y, " " + title + " ", Ink.Heading, area.Width - 4);
+    }
     public string Plain()
     {
         var b = new StringBuilder();
@@ -151,7 +171,8 @@ public sealed class Canvas(int width, int height)
                 if (inks[y, x] != previous || highlights[y, x] != highlight)
                 {
                     previous = inks[y, x]; highlight = highlights[y, x];
-                    string colour = previous switch { Ink.Muted => "38;5;245", Ink.Accent => "38;5;117", Ink.Good => "38;5;114", Ink.Warning => "38;5;221", Ink.Bad => "38;5;210", Ink.Heading => "1;38;5;153", _ => "38;5;252" };
+                    string colour = previous switch { Ink.Muted => "38;5;245", Ink.Accent => "38;5;117", Ink.Good => "38;5;114", Ink.Warning => "38;5;221", Ink.Bad => "38;5;210", Ink.Heading => "1;38;5;153",
+                        Ink.Added => "38;5;114;48;5;22", Ink.Removed => "38;5;217;48;5;52", Ink.Hunk => "38;5;141", Ink.Gutter => "38;5;240", Ink.Ref => "1;38;5;180", Ink.Border => "38;5;244", _ => "38;5;252" };
                     b.Append("\u001b[0;").Append(colour).Append(highlight == true ? ";48;5;237m" : "m");
                 }
                 b.Append(chars[y, x] == '\0' ? ' ' : chars[y, x]);
