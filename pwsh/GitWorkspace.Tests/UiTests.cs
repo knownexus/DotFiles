@@ -91,5 +91,20 @@ static partial class Tests
             Check(new Dialogs(review).Review("Diff", "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n"), "Review accepts");
             Check(review.Frames[0].Contains("+ y") && review.Frames[0].Contains("− x"), "Review renders diff sides");
         });
+        Test("main screen uses status letters and registers row, checkbox and view hits", () => {
+            var view = new WorkspaceView(Demo.Settings(), new()); view.Update(Demo.Snapshot());
+            var hits = new HitMap(); var layout = Layout.For(120, 32, 0.5);
+            string text = Screen.Render(view, layout, hits, Styled.FromText("preview"), 0, "", false).Plain();
+            Check(text.Contains(" M  src/EntryService.cs"), "Unstaged status letter"); Check(text.Contains("M   Controllers/QrCode.cs"), "Staged status letter");
+            Check(!text.Contains("Modified"), "Word labels removed");
+            int fileRow = view.Rows.FindIndex(r => r.Change?.Path == "src/EntryService.cs"); int y = layout.List.Y + fileRow;
+            var check = Enumerable.Range(0, layout.List.Width).Select(x => hits.At(x, y)).First(h => h?.Kind == "check");
+            Equal(fileRow, check!.Index, "Checkbox hit index"); Equal("row", hits.At(layout.List.Width - 3, y)?.Kind, "Row hit");
+            Equal("view", hits.At(3, layout.ViewBar.Y)?.Kind, "View bar hit"); Equal("preview", hits.At(layout.Preview.X + 5, layout.Preview.Y + 3)?.Kind, "Preview hit");
+            Equal("??", Screen.StatusCode(new("x", null, "??", ChangeArea.Untracked)), "Untracked code");
+            Equal("UU", Screen.StatusCode(new("x", null, "UU", ChangeArea.Conflict)), "Conflict code");
+            Equal("R ", Screen.StatusCode(new("x", "y", "R.", ChangeArea.Staged)), "Staged rename");
+            Equal(" D", Screen.StatusCode(new("x", null, ".D", ChangeArea.Unstaged)), "Unstaged delete");
+        });
     }
 }

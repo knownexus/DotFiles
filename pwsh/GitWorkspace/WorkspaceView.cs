@@ -2,6 +2,7 @@ namespace GitWorkspace;
 
 public sealed record Row(string Id, string Kind, string Text, Worktree? Tree = null, Change? Change = null, string? Project = null, BranchInfo? Branch = null);
 public sealed record ViewLocation(string Group, string? Repo, bool Worktrees, string Search, string Filter, string? Focus, int Scroll);
+public enum ViewMode { Changes, Worktrees, Commits }
 
 public sealed class WorkspaceView(Settings settings, ViewState state)
 {
@@ -15,7 +16,8 @@ public sealed class WorkspaceView(Settings settings, ViewState state)
     public Func<Worktree, bool> Selectable { get; set; } = t => t.Usable;
     public string Search { get; set; } = "";
     public string Filter { get; set; } = "All changes";
-    public bool WorktreeMode { get; set; }
+    public ViewMode Mode { get; set; }
+    public bool WorktreeMode { get => Mode == ViewMode.Worktrees; set => Mode = value ? ViewMode.Worktrees : ViewMode.Changes; }
     public int Focus { get; set; }
     public int Scroll { get; set; }
     public List<Row> Rows { get; private set; } = [];
@@ -40,7 +42,7 @@ public sealed class WorkspaceView(Settings settings, ViewState state)
     {
         back.Push(new(State.Group, State.Repo, WorktreeMode, Search, Filter, Current?.Id, Scroll));
         State.Repo = repo; if (group is not null) State.Group = group;
-        WorktreeMode = repo is not null; Search = ""; Filter = "All changes"; Focus = Scroll = 0;
+        if (Mode != ViewMode.Commits) WorktreeMode = repo is not null; Search = ""; Filter = "All changes"; Focus = Scroll = 0;
         if (repo is not null) State.Collapsed.Remove("p:" + repo);
         Rebuild(); Focus = Scroll = 0;
     }
@@ -165,71 +167,92 @@ public static class Screen
         int first = Math.Max(1, (length - 1) / 2);
         return text[..first] + "…" + text[^(length - first - 1)..];
     }
-    public static Canvas Render(WorkspaceView view, int width, int height, string preview, int previewScroll, string notice, bool refreshing)
+    // Git's two-letter status: left = staged side, right = unstaged side.
+    public static string StatusCode(Change c) => c.Area switch {
+        ChangeArea.Untracked => "??",
+        ChangeArea.Conflict => c.XY.Replace('.', ' ').PadRight(2)[..2],
+        ChangeArea.Staged => (c.XY[0] == '.' ? 'M' : c.XY[0]) + " ",
+        _ => " " + (c.XY.Length > 1 && c.XY[1] != '.' ? c.XY[1] : 'M')
+    };
+    public static Canvas Render(WorkspaceView view, int width, int height, string preview, int previewScroll, string notice, bool refreshing) =>
+        Render(view, Layout.For(width, height, view.State.SplitRatio), new HitMap(),
+            DiffView.LooksLikeDiff(preview) ? DiffView.Render(DiffView.Parse(preview), null) : Styled.FromText(preview), previewScroll, notice, refreshing);
+
+    public static Canvas Render(WorkspaceView view, Layout layout, HitMap hits, IReadOnlyList<StyledLine> preview, int previewScroll, string notice, bool refreshing,
+        Action<Canvas, Layout, HitMap>? body = null)
     {
-        var c = new Canvas(width, height);
-        if (width < 65 || height < 16) { c.Text(1, 1, "Git Workspace", Ink.Heading); c.Text(1, 3, "Enlarge terminal to at least 66 columns × 16 rows."); c.Text(1, 5, "Q quit"); return c; }
-        bool split = width >= 118; int left = split ? Math.Clamp(width / 2, 55, 90) : width;
-        c.Text(2, 1, "GIT WORKSPACE", Ink.Heading);
-        c.Text(20, 1, view.ScopeLabel + (refreshing ? "  · refreshing…" : ""), Ink.Accent, width - 22);
-        c.Text(2, 3, view.WorktreeMode ? "  Changes    [Worktrees]" : "[Changes]    Worktrees", Ink.Accent);
-        c.Text(30, 3, "P Repo  H History", Ink.Accent, width - 32);
-        c.Text(49, 3, "T Untracked: " + (view.State.ShowUntracked ? "on" : "off"), view.State.ShowUntracked ? Ink.Accent : Ink.Warning, width - 49);
-        if (width > 100) c.Text(67, 3, "Filter: " + view.Filter + (view.Search.Length > 0 ? "  / " + view.Search : ""), Ink.Muted, width - 69);
-        c.Line(4);
-        int body = height - 10;
+        int width = layout.Footer.Width, height = layout.Footer.Y + 2;
+        var c = new Canvas(width, height); hits.Clear();
+        if (width < Layout.MinWidth || height < Layout.MinHeight) { c.Text(1, 1, "Git Workspace", Ink.Heading); c.Text(1, 3, "Enlarge terminal to at least 66 columns × 16 rows."); c.Text(1, 5, "Q quit"); return c; }
+        c.Text(2, layout.Title.Y, "GIT WORKSPACE", Ink.Heading);
+        c.Text(20, layout.Title.Y, view.ScopeLabel + (refreshing ? "  · refreshing…" : ""), Ink.Accent, width - 22);
+        ViewBar(c, layout.ViewBar, hits, view);
+        c.Line(layout.ViewBar.Y + 1);
+        if (body is not null) body(c, layout, hits);
+        else List(c, layout.List, hits, view);
+        if (layout.Split) {
+            for (int y = layout.Preview.Y; y < layout.Preview.Bottom; y++) c.Text(layout.Preview.X - 1, y, "│", Ink.Border);
+            var area = new Rect(layout.Preview.X + 1, layout.Preview.Y, layout.Preview.Width - 2, layout.Preview.Height);
+            if (body is null) Styled.Draw(c, area, preview, previewScroll);
+            hits.Add(layout.Preview, new Hit("preview"));
+        }
+        c.Line(layout.Context.Y - 1);
+        string selection = view.WorktreeMode ? $"{view.Targets.Count} worktrees selected" : $"{view.Selected.Count} changes selected" + (view.HiddenSelections > 0 ? $" · {view.HiddenSelections} hidden" : "");
+        c.Text(2, layout.Context.Y, selection + "  · " + notice, Ink.Muted, width - 4);
+        Footer.Render(c, layout.Footer, hits, Footer.For(view, null));
+        return c;
+    }
+    static void ViewBar(Canvas c, Rect bar, HitMap hits, WorkspaceView view)
+    {
+        string[] names = ["Changes", "Worktrees", "Commits"]; int x = 2;
+        for (int i = 0; i < names.Length; i++) {
+            bool active = (int)view.Mode == i; string label = active ? "[" + names[i] + "]" : " " + names[i] + " ";
+            c.Text(x, bar.Y, label, active ? Ink.Heading : Ink.Muted); hits.Add(x, bar.Y, label.Length, new Hit("view", i)); x += label.Length + 2;
+        }
+        string untracked = "T untracked: " + (view.State.ShowUntracked ? "on" : "off");
+        string filter = "F " + view.Filter + (view.Search.Length > 0 ? "  / " + view.Search : "");
+        int right = bar.Width - 2 - filter.Length;
+        if (right > x + untracked.Length + 3) { c.Text(right, bar.Y, filter, Ink.Muted); hits.Add(right, bar.Y, filter.Length, new Hit("action", Id: "f")); }
+        int ux = Math.Max(x + 2, right - untracked.Length - 3);
+        if (ux + untracked.Length < bar.Width) { c.Text(ux, bar.Y, untracked, view.State.ShowUntracked ? Ink.Accent : Ink.Warning); hits.Add(ux, bar.Y, untracked.Length, new Hit("action", Id: "t")); }
+    }
+    static void List(Canvas c, Rect list, HitMap hits, WorkspaceView view)
+    {
+        int left = list.Width;
         if (view.Focus < view.Scroll) view.Scroll = view.Focus;
-        if (view.Focus >= view.Scroll + body) view.Scroll = view.Focus - body + 1;
-        for (int y = 0; y < body; y++)
+        if (view.Focus >= view.Scroll + list.Height) view.Scroll = view.Focus - list.Height + 1;
+        for (int y = 0; y < list.Height; y++)
         {
             int index = view.Scroll + y; if (index >= view.Rows.Count) break;
-            var r = view.Rows[index]; bool focus = index == view.Focus;
-            if (focus) c.Fill(1, 5 + y, left - 2);
-            var ink = r.Kind == "project" ? Ink.Heading : r.Change?.Area switch { ChangeArea.Staged => Ink.Good, ChangeArea.Conflict => Ink.Bad, ChangeArea.Untracked => Ink.Warning, _ => r.Kind == "worktree" ? Ink.Accent : Ink.Text };
-            string text;
+            var r = view.Rows[index]; bool focus = index == view.Focus; int row = list.Y + y;
+            if (focus) c.Fill(1, row, left - 2);
+            hits.Add(0, row, left, new Hit("row", index));
+            string text; int checkX;
             if (r.Kind == "project")
             {
                 int count = view.InGroup().Where(t => t.Project == r.Project).Sum(t => t.Changes.Where(ch => view.State.ShowUntracked || ch.Area != ChangeArea.Untracked).Select(ch => ch.Path).Distinct().Count());
                 text = (view.State.Collapsed.Contains(r.Id) ? "▸ " : "▾ ") + view.Check(r) + r.Text + $"  · {count} files ";
                 text += new string('─', Math.Max(0, left - text.Length - 4));
+                c.Text(1, row, text, Ink.Heading, left - 2, focus); hits.Add(1, row, 2, new Hit("fold", index)); checkX = 3;
             }
             else if (r.Kind == "worktree")
             {
                 string state = r.Tree!.Error.Length > 0 ? "Unavailable" : r.Tree.Operation.Length > 0 ? r.Tree.Operation : $"↑{r.Tree.Ahead} ↓{r.Tree.Behind}" + (r.Tree.Upstream is null ? " · no upstream" : r.Tree.UpstreamGone ? " · upstream missing" : "");
-                int available = left - 13 - state.Length;
-                int nameWidth = Math.Max(8, Math.Min(24, available / 3));
-                int branchWidth = Math.Max(10, available - nameWidth - 3);
+                int available = left - 13 - state.Length, nameWidth = Math.Max(8, Math.Min(24, available / 3)), branchWidth = Math.Max(10, available - nameWidth - 3);
                 text = "  " + (view.State.Collapsed.Contains(r.Id) ? "▸ " : "▾ ") + view.Check(r) + Shorten(r.Tree.Name, nameWidth) + " → " + Shorten(r.Tree.BranchLabel, branchWidth) + "  " + state;
+                c.Text(1, row, text, Ink.Accent, left - 2, focus); hits.Add(3, row, 2, new Hit("fold", index)); checkX = 5;
             }
-            else if (r.Kind == "branch") text = "    ◇ " + Shorten(r.Text, left - 29) + "  · not checked out";
+            else if (r.Kind == "branch") { c.Text(1, row, "    ◇ " + Shorten(r.Text, left - 29) + "  · not checked out", Ink.Text, left - 2, focus); continue; }
             else
             {
-                var ch = r.Change!;
-                var label = ch.Label;
-                text = "      " + view.Check(r) + r.Text;
-                int room = left - 5 - label.Length;
-                if (text.Length > room) text = text[..Math.Max(0, room - 1)] + "…";
-                text = text.PadRight(room) + " " + label;
+                var ch = r.Change!; string code = StatusCode(ch);
+                var ink = ch.Area switch { ChangeArea.Staged => Ink.Good, ChangeArea.Conflict => Ink.Bad, _ => Ink.Warning };
+                c.Text(1, row, "      " + view.Check(r), Ink.Text, left - 2, focus);
+                c.Text(10, row, code, ink, 2, focus);
+                c.Text(14, row, Shorten(r.Text, Math.Max(4, left - 16)), Ink.Text, left - 15, focus); checkX = 7;
             }
-            c.Text(1, 5 + y, text, ink, left - 2, focus);
+            hits.Add(checkX, row, 3, new Hit("check", index));
         }
-        if (view.Rows.Count == 0) c.Text(3, 6, view.Settings.Projects.Count == 0 ? "No projects yet. More → Add project." : "No matches. Change the filter or workspace.", Ink.Muted, left - 6);
-        if (split)
-        {
-            for (int y = 5; y < height - 5; y++) c.Text(left, y, "│", Ink.Muted);
-            c.Text(left + 2, 5, "PREVIEW", Ink.Heading, width - left - 3);
-            var lines = preview.Replace("\r", "").Split('\n');
-            for (int i = 0; i < body - 2 && i + previewScroll < lines.Length; i++)
-            {
-                var line = lines[i + previewScroll]; var ink = line.StartsWith('+') ? Ink.Good : line.StartsWith('-') ? Ink.Bad : line.StartsWith("@@") ? Ink.Accent : Ink.Text;
-                c.Text(left + 2, 7 + i, line, ink, width - left - 3);
-            }
-        }
-        c.Line(height - 5);
-        string selection = view.WorktreeMode ? $"{view.Targets.Count} worktrees selected" : $"{view.Selected.Count} changes selected" + (view.HiddenSelections > 0 ? $" · {view.HiddenSelections} hidden" : "");
-        c.Text(2, height - 4, selection + "  · " + notice, Ink.Muted, width - 4);
-        c.Text(2, height - 3, view.WorktreeMode ? "C Commit…   B Branch…   Y Sync…   M More…   I Rebase…" : "S Stage   U Unstage   C Commit…   B Branch…   Y Sync…   M More…", Ink.Accent, width - 4);
-        c.Text(2, height - 2, width < 100 ? "W groups · [ ] cycle · Backspace back · Space select · ? · Q quit" : "Space select · Enter review · Tab view · W groups · [ ] cycle · Backspace back · F filter · / search · ? · Q quit", Ink.Muted, width - 4);
-        return c;
+        if (view.Rows.Count == 0) c.Text(3, list.Y + 1, view.Settings.Projects.Count == 0 ? "No projects yet. More → Add project." : "No matches. Change the filter or workspace.", Ink.Muted, left - 6);
     }
 }

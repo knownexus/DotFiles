@@ -191,8 +191,8 @@ static partial class Tests
         });
         Test("canvas adapts to narrow and wide layouts and sanitizes terminal controls", () => {
             var view = new WorkspaceView(Demo.Settings(), new()); view.Update(Demo.Snapshot());
-            string wide = Screen.Render(view, 140, 32, Demo.Diff, 0, "", false).Plain(); Check(wide.Contains("PREVIEW") && wide.Contains("AccessControl") && wide.Contains("Joiners") && wide.Contains("mobileApp"), "Wide layout");
-            string narrow = Screen.Render(view, 85, 24, Demo.Diff, 0, "", false).Plain(); Check(!narrow.Contains("PREVIEW") && narrow.Contains("Space select"), "Narrow layout");
+            string wide = Screen.Render(view, 140, 32, Demo.Diff, 0, "", false).Plain(); Check(wide.Contains("━ src/EntryService.cs") && wide.Contains("AccessControl") && wide.Contains("Joiners") && wide.Contains("mobileApp"), "Wide layout");
+            string narrow = Screen.Render(view, 85, 24, Demo.Diff, 0, "", false).Plain(); Check(!narrow.Contains("━ src/EntryService.cs") && narrow.Contains("Space select"), "Narrow layout");
             Equal("bad [31mtext", Canvas.Clean("bad\u001b[31mtext"), "Control sanitization");
         });
         }

@@ -28,6 +28,7 @@ public sealed class ViewState
     public string? Repo { get; set; }
     public bool ShowUntracked { get; set; } = true;
     public HashSet<string> Collapsed { get; set; } = [];
+    public double SplitRatio { get; set; } = 0.5;
 }
 
 public static class Config

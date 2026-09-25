@@ -7,6 +7,8 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
     readonly WorkspaceView view = new(settings, Config.ReadOr(configPath + ".view.json", new ViewState()));
     readonly List<OperationResult> activity = Config.ReadOr(configPath + ".activity.json", new List<OperationResult>());
     readonly List<Plan> failed = [];
+    readonly HitMap hits = new();
+    List<StyledLine> previewLines = [];
     Terminal terminal = null!;
     Dialogs dialog = null!;
     string notice = "Checkboxes select; Staged labels show commit contents.";
@@ -29,7 +31,8 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
                 if (scan?.IsCompleted == true) { view.Update(scan.GetAwaiter().GetResult()); scan = null; previewKey = ""; nextScan = DateTime.Now.AddSeconds(Math.Max(2, settings.RefreshSeconds)); }
                 if (!demo && scan is null && DateTime.Now >= nextScan) { scan = Task.Run(() => Git.Scan(settings)); nextScan = DateTime.Now.AddSeconds(Math.Max(2, settings.RefreshSeconds)); }
                 UpdatePreview();
-                terminal.Draw(Screen.Render(view, terminal.Width, terminal.Height, preview, previewScroll, notice, scan is not null));
+                var layout = Layout.For(terminal.Width, terminal.Height, view.State.SplitRatio);
+                terminal.Draw(Screen.Render(view, layout, hits, previewLines, previewScroll, notice, scan is not null));
                 var key = terminal.Poll(120);
                 if (key is null) continue;
                 try { Handle(key); } catch (Exception e) { dialog.Message("Unable to complete action", e.Message); notice = "Action stopped; open Activity for completed operations."; }
@@ -66,33 +69,26 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         }
         else preview = string.Join("\n\n", view.InGroup().Where(t => row?.Project is null || t.Project == row.Project).Select(t => t.Title + "\n" + t.Summary)) +
             (view.Snapshot.Errors.Count > 0 ? "\n\nProject errors:\n" + string.Join('\n', view.Snapshot.Errors) : "");
+        previewLines = DiffView.LooksLikeDiff(preview) ? DiffView.Render(DiffView.Parse(preview), null) : Styled.FromText(preview);
     }
     void Handle(Input key)
     {
         if (key.Mouse)
         {
+            var hit = hits.At(key.X, key.Y);
             if (key.Wheel != 0) {
-                if (terminal.Width >= 118 && key.X > Math.Clamp(terminal.Width / 2, 55, 90)) previewScroll = Math.Max(0, previewScroll + key.Wheel);
+                if (hit?.Kind == "preview") previewScroll = Math.Max(0, previewScroll + key.Wheel);
                 else view.Focus = Math.Clamp(view.Focus + key.Wheel, 0, Math.Max(0, view.Rows.Count - 1));
                 return;
             }
-            if (key.Y == 3 && key.X < 28) { view.WorktreeMode = !view.WorktreeMode; view.Rebuild(); return; }
-            if (key.Y == 3 && key.X >= 30 && key.X < 36) { RepoView(); return; }
-            if (key.Y == 3 && key.X >= 38 && key.X < 47) { BrowseHistory(); return; }
-            if (key.Y == 3 && key.X >= 49 && key.X < 65) { ToggleUntracked(); return; }
-            if (key.Y == terminal.Height - 3) {
-                if (view.WorktreeMode && key.X >= 43) { RebaseInteractive(); return; }
-                int actionX = key.X + (view.WorktreeMode ? 22 : 0);
-                char command = actionX < 12 ? 's' : actionX < 24 ? 'u' : actionX < 36 ? 'c' : actionX < 48 ? 'b' : actionX < 58 ? 'y' : 'm';
-                Handle(new(Character: command)); return;
-            }
-            int index = view.Scroll + key.Y - 5;
-            if (key.Y >= 5 && key.Y < terminal.Height - 5 && index < view.Rows.Count && (terminal.Width < 118 || key.X < Math.Clamp(terminal.Width / 2, 55, 90))) {
-                view.Focus = index;
-                var row = view.Current!;
-                int checkStart = row.Kind == "project" ? 3 : row.Kind == "worktree" ? 5 : 7;
-                if (key.X >= checkStart && key.X <= checkStart + 2) view.Toggle(row);
-                else if (row.Kind != "file" && key.X < checkStart) Collapse();
+            if (key.Button == MouseButton.Right && hit?.Kind != "tab") return;
+            switch (hit?.Kind)
+            {
+                case "view": SetMode((ViewMode)hit.Index); break;
+                case "action": HandleAction(hit.Id!); break;
+                case "check": view.Focus = hit.Index; view.Toggle(view.Current); break;
+                case "fold": view.Focus = hit.Index; Collapse(); break;
+                case "row": view.Focus = hit.Index; if (key.DoubleClick) Handle(new(ConsoleKey.Enter)); break;
             }
             return;
         }
@@ -103,7 +99,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (key.Key == ConsoleKey.PageDown) { previewScroll = Math.Max(0, Math.Min(preview.Split('\n').Length - 1, previewScroll + 10)); return; }
         if (key.Key == ConsoleKey.Spacebar) { view.Toggle(view.Current); return; }
         if (key.Key is ConsoleKey.LeftArrow or ConsoleKey.RightArrow) { Collapse(); return; }
-        if (key.Key == ConsoleKey.Tab) { view.WorktreeMode = !view.WorktreeMode; view.Rebuild(); return; }
+        if (key.Key == ConsoleKey.Tab) { SetMode(view.WorktreeMode ? ViewMode.Changes : ViewMode.Worktrees); return; }
         if (key.Key == ConsoleKey.Enter) { if (view.Current?.Kind == "branch" || view.RepoMode && view.Current?.Kind == "worktree") BrowseHistory(); else dialog.Message("Preview · " + (view.Current?.Text ?? "Workspace"), preview); return; }
         if (key.Key == ConsoleKey.Backspace) { view.Back(); previewKey = ""; return; }
         if (key.Key == ConsoleKey.Escape) { view.Search = ""; view.Filter = "All changes"; view.Rebuild(); return; }
@@ -131,7 +127,20 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
             case 'm': More(); break;
             case 'o': Editor(); break;
             case '?': Help(); break;
+            case '<': view.State.SplitRatio = Math.Clamp(view.State.SplitRatio - 0.05, 0.35, 0.65); break;
+            case '>': view.State.SplitRatio = Math.Clamp(view.State.SplitRatio + 0.05, 0.35, 0.65); break;
         }
+    }
+    void SetMode(ViewMode mode)
+    {
+        if (mode == ViewMode.Commits) { notice = "Commits view arrives in a later update."; return; } // replaced in Task 20
+        view.Mode = mode; view.Rebuild(); previewKey = "";
+    }
+    void HandleAction(string id)
+    {
+        if (id == " ") Handle(new(ConsoleKey.Spacebar));
+        else if (id == "\r") Handle(new(ConsoleKey.Enter));
+        else Handle(new(Character: id[0]));
     }
     void ToggleUntracked()
     {
