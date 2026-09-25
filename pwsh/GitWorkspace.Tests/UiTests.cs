@@ -68,5 +68,14 @@ static partial class Tests
             var combined = DiffView.Parse("diff --cc c.txt\n@@@ -1,1 -1,1 +1,3 @@@\n++<<<<<<< ours\n +mine\n- theirs\n");
             Check(combined.Count(l => l.Kind == DiffKind.Added) == 2 && combined.Any(l => l.Kind == DiffKind.Removed), "Combined conflict diff");
         });
+        Test("untracked and tracked diffs parse with real line numbers", () => {
+            var repo = Repo(); Write(repo, "new.txt", "one\r\ntwo\n"); Write(repo, "file.txt", original.Replace("line 2\n", "line two\n"));
+            var tree = Tree(repo);
+            var untracked = DiffView.Parse(Git.Diff(tree, tree.Changes.Single(c => c.Area == ChangeArea.Untracked)));
+            Equal(2, untracked.Count(l => l.Kind == DiffKind.Added), "Untracked lines"); Equal(2, untracked.Last(l => l.Kind == DiffKind.Added).New, "Untracked numbering");
+            Equal("new.txt", untracked.First(l => l.Kind == DiffKind.Header).Text, "Untracked header");
+            var tracked = DiffView.Parse(Git.Diff(tree, tree.Changes.Single(c => c.Area == ChangeArea.Unstaged)));
+            Equal(2, tracked.Single(l => l.Kind == DiffKind.Removed).Old, "Tracked old number"); Equal(2, tracked.Single(l => l.Kind == DiffKind.Added).New, "Tracked new number");
+        });
     }
 }

@@ -157,8 +157,11 @@ public static class Git
             try {
                 if (new FileInfo(path).Length > 512_000) return "Untracked file exceeds preview limit. Open in editor to review.";
                 var bytes = File.ReadAllBytes(path);
+                if (bytes.Length == 0) return "Empty untracked file.";
                 if (bytes.Contains((byte)0)) return "Binary untracked file.";
-                return "Untracked · " + change.Path + "\n\n" + Encoding.UTF8.GetString(bytes);
+                var content = Encoding.UTF8.GetString(bytes).Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
+                // A synthetic diff lets untracked files use the same old/new presentation as tracked edits.
+                return $"--- /dev/null\n+++ b/{change.Path}\n@@ -0,0 +1,{content.Length} @@\n" + string.Concat(content.Select(l => "+" + l + "\n"));
             } catch (IOException e) { return e.Message; }
         }
         List<string> args = ["diff", "--no-ext-diff", "--no-textconv", "--no-color"];
