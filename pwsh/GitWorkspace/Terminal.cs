@@ -3,7 +3,8 @@ using System.Text;
 
 namespace GitWorkspace;
 
-public record Input(ConsoleKey Key = 0, char Character = '\0', bool Control = false, bool Shift = false, int X = -1, int Y = -1, int Wheel = 0)
+public record Input(ConsoleKey Key = 0, char Character = '\0', bool Control = false, bool Shift = false, int X = -1, int Y = -1, int Wheel = 0,
+    MouseButton Button = MouseButton.None, bool DoubleClick = false)
 {
     public bool Mouse => X >= 0;
 }
@@ -11,7 +12,7 @@ public record Input(ConsoleKey Key = 0, char Character = '\0', bool Control = fa
 // Small terminal surface with no startup-time package imports. Native Windows input
 // provides mouse events in both Windows Terminal and conhost; Console.ReadKey is the
 // keyboard fallback elsewhere. All modes are restored before launching an editor.
-public sealed class Terminal : IDisposable
+public sealed class Terminal : ISurface, IDisposable
 {
     readonly bool windows = OperatingSystem.IsWindows();
     IntPtr input, output;
@@ -23,6 +24,7 @@ public sealed class Terminal : IDisposable
     readonly Encoding oldEncoding = Console.OutputEncoding;
     public int Width => Math.Clamp(Console.WindowWidth - 1, 1, 300);
     public int Height => Math.Clamp(Console.WindowHeight, 1, 100);
+    public Canvas? LastFrame { get; private set; }
     public Terminal()
     {
         if (Console.IsInputRedirected || Console.IsOutputRedirected)
@@ -63,10 +65,8 @@ public sealed class Terminal : IDisposable
                         return new((ConsoleKey)record.Key, record.Character, (record.Control & 0x000C) != 0, (record.Control & 0x0010) != 0);
                     if (record.Type == 2)
                     {
-                        if (record.Flags == 4) return new(X: record.X, Y: record.Y, Wheel: (short)(record.Buttons >> 16) > 0 ? -3 : 3);
-                        bool click = (record.Buttons & 1) != 0 && (previousButtons & 1) == 0;
-                        previousButtons = record.Buttons;
-                        if (click) return new(X: record.X, Y: record.Y);
+                        var mouse = MouseDecoder.Decode(record.Buttons, record.Flags, record.X, record.Y, ref previousButtons);
+                        if (mouse is not null) return mouse;
                     }
                 }
             }
@@ -86,6 +86,7 @@ public sealed class Terminal : IDisposable
     }
     public void Draw(Canvas canvas)
     {
+        LastFrame = canvas;
         var lines = canvas.Ansi().Split("\r\n");
         var update = new StringBuilder();
         if (previousLines?.Length != lines.Length || previousWidth != canvas.Width) { update.Append("\u001b[2J"); previousLines = null; }

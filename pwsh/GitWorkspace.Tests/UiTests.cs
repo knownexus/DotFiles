@@ -25,5 +25,15 @@ static partial class Tests
             Equal(2, hits.Count, "Empty region skipped");
             hits.Clear(); Check(hits.At(4, 5) is null, "Cleared");
         });
+        Test("mouse decoder reports left, right, double click and wheel once per press", () => {
+            uint previous = 0;
+            var left = MouseDecoder.Decode(1, 0, 4, 6, ref previous); Equal(MouseButton.Left, left?.Button, "Left press"); Equal(4, left?.X, "X");
+            Check(MouseDecoder.Decode(1, 1, 5, 6, ref previous) is null, "Held button while moving is not a new click");
+            Check(MouseDecoder.Decode(0, 0, 5, 6, ref previous) is null, "Release");
+            Equal(MouseButton.Right, MouseDecoder.Decode(2, 0, 1, 1, ref previous)?.Button, "Right press");
+            MouseDecoder.Decode(0, 0, 1, 1, ref previous);
+            Check(MouseDecoder.Decode(1, 2, 1, 1, ref previous)?.DoubleClick == true, "Double click");
+            Equal(-3, MouseDecoder.Decode(unchecked((uint)(120 << 16)), 4, 1, 1, ref previous)?.Wheel, "Wheel up");
+        });
     }
 }
