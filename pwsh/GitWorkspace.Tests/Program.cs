@@ -3,12 +3,14 @@ using GitWorkspace;
 static partial class Tests
 {
     static string root = "";
+    static string? filter;
     static int passed, failed, sequence;
     static readonly string original = string.Join('\n', Enumerable.Range(1, 40).Select(i => "line " + i)) + "\n";
     static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
     static void Equal<T>(T expected, T actual, string message) { Check(Equals(expected, actual), $"{message}: expected {expected}, got {actual}"); }
     static void Test(string name, Action test)
     {
+        if (filter is not null && !name.Contains(filter, StringComparison.OrdinalIgnoreCase)) return;
         try { test(); Console.WriteLine("PASS " + name); passed++; }
         catch (Exception e) { Console.WriteLine("FAIL " + name + "\n" + e); failed++; }
     }
@@ -33,6 +35,8 @@ static partial class Tests
     public static int Main(string[] args)
     {
         if (args.FirstOrDefault() == "--sequence-editor") return SequenceEditor(args);
+        int filterAt = Array.IndexOf(args, "--filter");
+        if (filterAt >= 0 && filterAt + 1 < args.Length) filter = args[filterAt + 1];
         root = Path.Combine(Path.GetTempPath(), "gws-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         string global = Path.Combine(root, "gitconfig"); File.WriteAllText(global, "");
         Environment.SetEnvironmentVariable("GIT_CONFIG_GLOBAL", global); Environment.SetEnvironmentVariable("GIT_CONFIG_NOSYSTEM", "1");
