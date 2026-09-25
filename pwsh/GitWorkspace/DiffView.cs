@@ -22,7 +22,8 @@ public static partial class DiffView
 {
     [GeneratedRegex(@"^@@+ -(\d+)(?:,\d+)? (?:-\d+(?:,\d+)? )*\+(\d+)")] private static partial Regex HunkStart();
 
-    public static bool LooksLikeDiff(string text) => text.StartsWith("diff --", StringComparison.Ordinal) || text.Contains("\ndiff --", StringComparison.Ordinal) || text.Contains("\n@@ ", StringComparison.Ordinal);
+    public static bool LooksLikeDiff(string text) => text.StartsWith("diff --", StringComparison.Ordinal) || text.StartsWith("--- ", StringComparison.Ordinal) ||
+        text.Contains("\ndiff --", StringComparison.Ordinal) || text.Contains("\n@@ ", StringComparison.Ordinal);
 
     public static List<DiffLine> Parse(string diff)
     {

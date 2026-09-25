@@ -56,9 +56,9 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         previewKey = key; if (moved) previewScroll = 0;
         if (row?.Change is not null)
         {
-            preview = $"{row.Tree!.Title}\n{row.Change.Area} · {row.Change.Path}\n\n" + (demo ? Demo.Diff : Git.Diff(row.Tree, row.Change));
-            if (!demo && view.SelectionStamps.TryGetValue(row.Id, out var stamp) && stamp != Operations.ChangeStamp(row.Tree, row.Change))
-                preview = "UPDATED SINCE SELECTION · uncheck and review before acting\n\n" + preview;
+            string diff = demo ? Demo.Diff : Git.Diff(row.Tree!, row.Change);
+            bool stale = !demo && view.SelectionStamps.TryGetValue(row.Id, out var stamp) && stamp != Operations.ChangeStamp(row.Tree!, row.Change);
+            preview = diff; previewLines = PreviewFor(row.Tree!, row.Change, diff, stale); return;
         }
         else if (row?.Branch is { } branch)
             preview = $"{branch.Project} / {branch.Name}\n\nNot checked out in a worktree.\n{branch.Head}\n{branch.Subject}\n\nH / Enter: review commit history\nP: open this repository\n\nA branch group entry follows this branch wherever it is checked out.";
@@ -69,7 +69,16 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         }
         else preview = string.Join("\n\n", view.InGroup().Where(t => row?.Project is null || t.Project == row.Project).Select(t => t.Title + "\n" + t.Summary)) +
             (view.Snapshot.Errors.Count > 0 ? "\n\nProject errors:\n" + string.Join('\n', view.Snapshot.Errors) : "");
-        previewLines = DiffView.LooksLikeDiff(preview) ? DiffView.Render(DiffView.Parse(preview), null) : Styled.FromText(preview);
+        previewLines = Styled.FromText(preview);
+    }
+    public static List<StyledLine> PreviewFor(Worktree tree, Change change, string diff, bool changedSinceSelection)
+    {
+        List<StyledLine> lines = [];
+        if (changedSinceSelection) { lines.Add(new("UPDATED SINCE SELECTION · uncheck and review before acting", Ink.Warning)); lines.Add(new("", Ink.Text)); }
+        lines.Add(new(tree.Title, Ink.Accent));
+        if (DiffView.LooksLikeDiff(diff)) lines.AddRange(DiffView.Render(DiffView.Parse(diff), DiffSides.ForChange(change)));
+        else { lines.Add(new(DiffSides.ForChange(change).Legend, Ink.Heading)); lines.AddRange(Styled.FromText(diff)); }
+        return lines;
     }
     void Handle(Input key)
     {
@@ -100,7 +109,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (key.Key == ConsoleKey.Spacebar) { view.Toggle(view.Current); return; }
         if (key.Key is ConsoleKey.LeftArrow or ConsoleKey.RightArrow) { Collapse(); return; }
         if (key.Key == ConsoleKey.Tab) { SetMode(view.WorktreeMode ? ViewMode.Changes : ViewMode.Worktrees); return; }
-        if (key.Key == ConsoleKey.Enter) { if (view.Current?.Kind == "branch" || view.RepoMode && view.Current?.Kind == "worktree") BrowseHistory(); else dialog.Message("Preview · " + (view.Current?.Text ?? "Workspace"), preview); return; }
+        if (key.Key == ConsoleKey.Enter) { if (view.Current?.Kind == "branch" || view.RepoMode && view.Current?.Kind == "worktree") BrowseHistory(); else dialog.Review("Preview · " + (view.Current?.Text ?? "Workspace"), previewLines, confirm: false); return; }
         if (key.Key == ConsoleKey.Backspace) { view.Back(); previewKey = ""; return; }
         if (key.Key == ConsoleKey.Escape) { view.Search = ""; view.Filter = "All changes"; view.Rebuild(); return; }
         switch (char.ToLowerInvariant(key.Character))
@@ -213,8 +222,9 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (destructive)
         {
             string explanation = action == "Discard unstaged" ? "Restore tracked files to their staged versions. Discard the selected unstaged edits." : "Permanently delete these untracked files. They are not recoverable from Git.";
-            var details = string.Join("\n\n", files.Select(x => x.Tree.Title + "\n" + Git.Diff(x.Tree, x.Change)));
-            if (!dialog.Review(action, explanation + "\n\n" + details, "Review file list")) return;
+            List<StyledLine> details = [.. Styled.FromText(explanation), new("", Ink.Text)];
+            foreach (var (tree, change) in files) { details.AddRange(PreviewFor(tree, change, Git.Diff(tree, change), false)); details.Add(new("", Ink.Text)); }
+            if (!dialog.Review(action, details, "Review file list")) return;
             if (dialog.Text(action, "Type DISCARD to confirm the reviewed files.") != "DISCARD") return;
         }
         Execute(plans, destructive || files.Any(x => !view.Rows.Any(r => r.Id == x.Tree.FileId(x.Change))));

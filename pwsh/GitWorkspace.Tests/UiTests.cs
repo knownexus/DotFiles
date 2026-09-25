@@ -117,5 +117,13 @@ static partial class Tests
             view.Navigate("AccessControl"); view.Focus = view.Rows.FindIndex(r => r.Kind == "branch"); Equal("\r,b,p,?,q", Keys(), "Branch row keys");
             Check(Footer.For(view, null).All(k => k.Key.Length == 1), "Single-character ids");
         });
+        Test("change previews carry a side legend and stale-selection warning", () => {
+            var repo = Repo(); Write(repo, "file.txt", "changed\n"); Git.Run(repo, "add", ".").Require(); Write(repo, "file.txt", "changed again\n");
+            var tree = Tree(repo); var staged = tree.Changes.Single(c => c.Area == ChangeArea.Staged);
+            var lines = App.PreviewFor(tree, staged, Git.Diff(tree, staged), false);
+            Check(lines.Any(l => l.Text == "− old: HEAD   + new: staged (index)"), "Staged legend");
+            Check(lines.Any(l => l.Ink == Ink.Added && l.Text.EndsWith("+ changed")), "Staged addition");
+            var warned = App.PreviewFor(tree, staged, Git.Diff(tree, staged), true); Equal(Ink.Warning, warned[0].Ink, "Stale warning first");
+        });
     }
 }
