@@ -9,7 +9,7 @@ public sealed partial class Dialogs
         {
             var visible = draft.Members.Where(m => (m.Project + " " + m.Label).Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
             focus = Math.Clamp(focus, 0, Math.Max(0, visible.Count - 1));
-            var c = Page("Project group · " + name, "Space select · / search · Enter save membership · Esc cancel");
+            var c = FullPage("Project group · " + name, "Space select · / search · Enter save membership · Esc cancel");
             c.Text(2, 4, "Mix entire repos, worktree paths and branches. Whole repos include future worktrees.", Ink.Muted, c.Width - 4);
             c.Text(2, 5, $"{draft.Checked.Count} explicit entries" + (search.Length > 0 ? " · / " + search : ""), Ink.Accent, c.Width - 4);
             int rows = Math.Max(1, c.Height - 11);

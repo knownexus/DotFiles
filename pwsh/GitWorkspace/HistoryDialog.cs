@@ -17,7 +17,7 @@ public sealed partial class Dialogs
             if (id != previewId) { preview = selected is null ? "No commits on this branch." : detail(selected, parent); previewId = id; previewScroll = 0; }
             bool split = terminal.Width >= 118;
             int left = split ? Math.Clamp(terminal.Width / 2, 55, 90) : terminal.Width;
-            var c = Page("History · " + title, terminal.Width < 100 ? "↑↓ · Enter patch · N/P pages · B branch · I rebase · Esc back" : "↑↓ select · Enter patch · N/P pages · B branch · I rebase from commit · Esc back");
+            var c = FullPage("History · " + title, terminal.Width < 100 ? "↑↓ · Enter patch · N/P pages · B branch · I rebase · Esc back" : "↑↓ select · Enter patch · N/P pages · B branch · I rebase from commit · Esc back");
             c.Text(2, 2, "Tip " + tip[..Math.Min(12, tip.Length)] + " · page " + (page + 1) + " · R refresh · M merge parent · PgUp/PgDn scroll diff", Ink.Muted, c.Width - 4);
             int rows = Math.Max(1, c.Height - 9);
             if (focus < scroll) scroll = focus; if (focus >= scroll + rows) scroll = focus - rows + 1;

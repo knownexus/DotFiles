@@ -77,5 +77,19 @@ static partial class Tests
             var tracked = DiffView.Parse(Git.Diff(tree, tree.Changes.Single(c => c.Area == ChangeArea.Unstaged)));
             Equal(2, tracked.Single(l => l.Kind == DiffKind.Removed).Old, "Tracked old number"); Equal(2, tracked.Single(l => l.Kind == DiffKind.Added).New, "Tracked new number");
         });
+        Test("popups draw over the dimmed screen, skip headings and survive tiny terminals", () => {
+            var backdrop = new Canvas(80, 24); backdrop.Text(0, 0, "BACKDROP");
+            var surface = new ScriptedSurface(80, 24, new Input(ConsoleKey.DownArrow), new Input(ConsoleKey.Enter)); surface.SetBackdrop(backdrop);
+            var pick = new Dialogs(surface).Choose("More actions", ["## Files", "Stage blocks", "## Stash", "Stash changes"]);
+            Equal(3, pick, "Down skips the heading");
+            Check(surface.Frames[0].StartsWith("BACKDROP"), "Backdrop visible behind popup"); Check(surface.Frames[0].Contains("┌─ More actions"), "Popup border");
+            var outside = new ScriptedSurface(80, 24, new Input(X: 0, Y: 0, Button: MouseButton.Left));
+            Check(new Dialogs(outside).Choose("Pick", ["a", "b"]) is null, "Click outside cancels");
+            Check(new Dialogs(new ScriptedSurface(20, 6, new Input(ConsoleKey.Escape))).Choose("Tiny", ["a"]) is null, "Tiny terminal");
+            Check(new Dialogs(new ScriptedSurface(20, 6, new Input(ConsoleKey.Escape))).Text("Tiny", "A long prompt that will not fit anywhere") is null, "Tiny text prompt");
+            var review = new ScriptedSurface(100, 30, new Input(ConsoleKey.Enter));
+            Check(new Dialogs(review).Review("Diff", "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n"), "Review accepts");
+            Check(review.Frames[0].Contains("+ y") && review.Frames[0].Contains("− x"), "Review renders diff sides");
+        });
     }
 }
