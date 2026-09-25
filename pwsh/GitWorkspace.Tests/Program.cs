@@ -197,6 +197,7 @@ static partial class Tests
         });
         }
         if (!args.Contains("--ignore")) GroupHistoryTests();
+        UiTests();
         IgnoreTests();
         Console.WriteLine($"\n{passed} passed; {failed} failed. Temporary fixtures: {root}");
         return failed == 0 ? 0 : 1;
