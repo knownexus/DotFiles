@@ -47,5 +47,26 @@ static partial class Tests
             Equal(Ink.Added, styled.InkAt(19, 0), "Added background spans the row");
             Equal(3, Styled.FromText("a\r\nb\nc").Count, "Text lines");
         });
+        Test("diff view numbers old and new lines and states each side", () => {
+            string diff = "diff --git a/src/A.cs b/src/A.cs\r\nindex 1..2 100644\r\n--- a/src/A.cs\r\n+++ b/src/A.cs\r\n@@ -10,3 +10,4 @@ class A\r\n keep\r\n-old line\r\n+new line\r\n+added\r\n tail\r\n\\ No newline at end of file\r\n";
+            var lines = DiffView.Parse(diff);
+            var removed = lines.Single(l => l.Kind == DiffKind.Removed); Equal(11, removed.Old, "Removed old number"); Check(removed.New is null, "Removed has no new number");
+            var added = lines.Where(l => l.Kind == DiffKind.Added).ToList(); Equal(11, added[0].New, "Added new number"); Equal(12, added[1].New, "Second added");
+            var tail = lines.Last(l => l.Kind == DiffKind.Context); Equal(12, tail.Old, "Context old"); Equal(13, tail.New, "Context new");
+            Check(lines.Any(l => l.Kind == DiffKind.Note), "No-newline note"); Check(lines.All(l => !l.Text.Contains('\r')), "CR stripped");
+            Equal("src/A.cs", lines.First(l => l.Kind == DiffKind.Header).Text, "File header");
+            var styled = DiffView.Render(lines, DiffSides.ForChange(new("src/A.cs", null, ".M", ChangeArea.Unstaged)));
+            Equal("− old: staged (index)   + new: working tree", styled[0].Text, "Legend");
+            Check(styled.Any(s => s.Ink == Ink.Removed && s.Text.Contains(" 11 ") && s.Text.Contains("− old line")), "Removed rendering");
+            Check(styled.Any(s => s.Ink == Ink.Added && s.Text.Contains("+ new line")), "Added rendering");
+            Check(!styled.Any(s => s.Text.StartsWith("+++") || s.Text.StartsWith("---")), "Raw file markers hidden");
+            Equal("− old: HEAD   + new: staged (index)", DiffSides.ForChange(new("a", null, "M.", ChangeArea.Staged)).Legend, "Staged legend");
+            Equal("+ new file (not in Git)", DiffSides.ForChange(new("a", null, "??", ChangeArea.Untracked)).Legend, "Untracked legend");
+            Equal("− old: parent 8175ff1   + new: a928430 \"Add QR\"", DiffSides.ForCommit("8175ff1", "a928430", "Add QR").Legend, "Commit legend");
+            var rename = DiffView.Parse("diff --git a/old.txt b/new.txt\nsimilarity index 90%\nrename from old.txt\nrename to new.txt\n--- a/old.txt\n+++ b/new.txt\n");
+            Equal("old.txt → new.txt", rename.First(l => l.Kind == DiffKind.Header).Text, "Rename header");
+            var combined = DiffView.Parse("diff --cc c.txt\n@@@ -1,1 -1,1 +1,3 @@@\n++<<<<<<< ours\n +mine\n- theirs\n");
+            Check(combined.Count(l => l.Kind == DiffKind.Added) == 2 && combined.Any(l => l.Kind == DiffKind.Removed), "Combined conflict diff");
+        });
     }
 }
