@@ -318,50 +318,54 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
     }
     void More()
     {
-        string[] options = ["Stage blocks of the highlighted file…", "Unstage blocks of the highlighted file…", "Discard selected unstaged edits…", "Delete selected untracked files…",
-            "Open highlighted file in editor", "Open configured diff tool", "Open configured merge tool", "Stash worktree changes…", "Apply a stash (keep entry)…",
-            "Activity and results", "Retry failed actions from last batch…", "Add project…", "Remove project from workspace…", "Remove saved group…", "Diagnostics", "Help", "Add files or patterns to .gitignore…"];
-        var pick = dialog.Choose("More actions", options); if (pick is null) return;
-        switch (pick)
-        {
-            case 0: HunkAction(false); break;
-            case 1: HunkAction(true); break;
-            case 2: FileAction("Discard unstaged"); break;
-            case 3: FileAction("Delete untracked"); break;
-            case 4: Editor(); break;
-            case 5: ExternalGit(false); break;
-            case 6: ExternalGit(true); break;
-            case 7:
-                if (!CanWrite()) return;
-                var stashTargets = PickTargets("Stash changes"); if (stashTargets is null) return;
-                var message = dialog.Text("Stash changes", "Message (tracked and untracked files are included).", "Workspace " + DateTime.Now.ToString("g"));
-                if (message is not null) Execute(stashTargets.Select(t => Operations.Stash(t, message)).ToList()); break;
-            case 8:
-                if (!CanWrite()) return;
-                var applyTargets = PickTargets("Apply stash"); if (applyTargets is null) return; List<Plan> plans = [];
-                foreach (var t in applyTargets) {
-                    var stashes = Git.Run(t.Path, "stash", "list", "--format=%gd %s").Require().Output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                    var s = dialog.Choose("Apply stash · " + t.Project + " (stashes are shared by its worktrees)", stashes);
-                    if (s is null) return; plans.Add(Operations.ApplyStash(t, stashes[s.Value].Split(' ')[0]));
-                }
-                Execute(plans); break;
-            case 9: dialog.Message("Activity · most recent first", activity.Count == 0 ? "No actions recorded yet." : string.Join("\n\n", activity.AsEnumerable().Reverse().Select(a => $"{(a.Success ? "✓" : "!")} {a.Time:g} · {a.Action}\n{a.Target}\n{a.Detail}"))); break;
-            case 10: if (CanWrite()) { if (failed.Count == 0) dialog.Message("Retry", "No failed actions in this session."); else Execute(failed.ToList()); } break;
-            case 11: AddProject(); break;
-            case 12:
-                if (!CanWrite()) return;
-                var remove = dialog.Choose("Remove registration (keep all repository files)", settings.Projects.Select(p => p.Name).ToList());
-                if (remove.HasValue && dialog.Review("Remove project registration", "Remove " + settings.Projects[remove.Value].Name + " from this workspace configuration. All files and Git data stay in place.")) {
-                    settings.Projects.RemoveAt(remove.Value); Config.Save(configPath, settings); view.Navigate(null, "All projects"); Refresh();
-                } break;
-            case 13:
-                RemoveGroup(); break;
-            case 14: dialog.Message("Diagnostics", $"Config: {configPath}\nLocal status refreshed: {view.Snapshot.TakenAt:g}\n\n" +
-                string.Join('\n', view.Snapshot.Errors) + "\n\n" + string.Join("\n\n", view.Snapshot.Worktrees.Select(t => $"{t.Title}\n{t.Path}\n{t.Error}\n{t.Prunable}\n{t.Locked}"))); break;
-            case 15: Help(); break;
-            case 16: IgnoreMenu(); break;
+        (string Label, Action? Run)[] items = [
+            ("## Files", null),
+            ("Stage blocks of the highlighted file…", () => HunkAction(false)), ("Unstage blocks of the highlighted file…", () => HunkAction(true)),
+            ("Discard selected unstaged edits…", () => FileAction("Discard unstaged")), ("Delete selected untracked files…", () => FileAction("Delete untracked")),
+            ("Open highlighted file in editor", Editor), ("Add files or patterns to .gitignore…", IgnoreMenu),
+            ("## Stash", null),
+            ("Stash worktree changes…", StashChanges), ("Apply a stash (keep entry)…", ApplyStash),
+            ("## Tools", null),
+            ("Open configured diff tool", () => ExternalGit(false)), ("Open configured merge tool", () => ExternalGit(true)),
+            ("## Repos & groups", null),
+            ("Add project…", AddProject), ("Remove project from workspace…", RemoveProject), ("Remove saved group…", RemoveGroup),
+            ("## Admin", null),
+            ("Activity and results", ShowActivity), ("Retry failed actions from last batch…", RetryFailed), ("Diagnostics", Diagnostics), ("Help", Help)
+        ];
+        var pick = dialog.Choose("More actions", items.Select(i => i.Label).ToList(), 1);
+        if (pick is not null) items[pick.Value].Run?.Invoke();
+    }
+    void StashChanges()
+    {
+        if (!CanWrite()) return;
+        var targets = PickTargets("Stash changes"); if (targets is null) return;
+        var message = dialog.Text("Stash changes", "Message (tracked and untracked files are included).", "Workspace " + DateTime.Now.ToString("g"));
+        if (message is not null) Execute(targets.Select(t => Operations.Stash(t, message)).ToList());
+    }
+    void ApplyStash()
+    {
+        if (!CanWrite()) return;
+        var targets = PickTargets("Apply stash"); if (targets is null) return; List<Plan> plans = [];
+        foreach (var t in targets) {
+            var stashes = Git.Run(t.Path, "stash", "list", "--format=%gd %s").Require().Output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var s = dialog.Choose("Apply stash · " + t.Project + " (stashes are shared by its worktrees)", stashes);
+            if (s is null) return; plans.Add(Operations.ApplyStash(t, stashes[s.Value].Split(' ')[0]));
+        }
+        Execute(plans);
+    }
+    void RemoveProject()
+    {
+        if (!CanWrite()) return;
+        var remove = dialog.Choose("Remove registration (keep all repository files)", settings.Projects.Select(p => p.Name).ToList());
+        if (remove.HasValue && dialog.Review("Remove project registration", "Remove " + settings.Projects[remove.Value].Name + " from this workspace configuration. All files and Git data stay in place.")) {
+            settings.Projects.RemoveAt(remove.Value); Config.Save(configPath, settings); view.Navigate(null, "All projects"); Refresh();
         }
     }
+    void ShowActivity() => dialog.Message("Activity · most recent first", activity.Count == 0 ? "No actions recorded yet." :
+        string.Join("\n\n", activity.AsEnumerable().Reverse().Select(a => $"{(a.Success ? "✓" : "!")} {a.Time:g} · {a.Action}\n{a.Target}\n{a.Detail}")));
+    void RetryFailed() { if (CanWrite()) { if (failed.Count == 0) dialog.Message("Retry", "No failed actions in this session."); else Execute(failed.ToList()); } }
+    void Diagnostics() => dialog.Message("Diagnostics", $"Config: {configPath}\nLocal status refreshed: {view.Snapshot.TakenAt:g}\n\n" +
+        string.Join('\n', view.Snapshot.Errors) + "\n\n" + string.Join("\n\n", view.Snapshot.Worktrees.Select(t => $"{t.Title}\n{t.Path}\n{t.Error}\n{t.Prunable}\n{t.Locked}")));
     void AddProject()
     {
         if (!CanWrite()) return;

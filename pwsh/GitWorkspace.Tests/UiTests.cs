@@ -108,5 +108,14 @@ static partial class Tests
             Equal("R ", Screen.StatusCode(new("x", "y", "R.", ChangeArea.Staged)), "Staged rename");
             Equal(" D", Screen.StatusCode(new("x", null, ".D", ChangeArea.Unstaged)), "Unstaged delete");
         });
+        Test("footer keys follow the focused row", () => {
+            var view = new WorkspaceView(Demo.Settings(), new()); view.Update(Demo.Snapshot());
+            string Keys() => string.Join(",", Footer.For(view, null).Select(k => k.Key));
+            view.Focus = view.Rows.FindIndex(r => r.Kind == "file"); Check(Keys().StartsWith(" ,s,u,c,o,\r"), "File keys: " + Keys());
+            view.Focus = view.Rows.FindIndex(r => r.Kind == "worktree"); Check(Keys().Contains("h") && !Keys().Contains(",s,"), "Worktree keys: " + Keys());
+            view.WorktreeMode = true; view.Rebuild(); view.Focus = view.Rows.FindIndex(r => r.Kind == "worktree"); Check(Keys().Contains("i"), "Worktree mode rebase");
+            view.Navigate("AccessControl"); view.Focus = view.Rows.FindIndex(r => r.Kind == "branch"); Equal("\r,b,p,?,q", Keys(), "Branch row keys");
+            Check(Footer.For(view, null).All(k => k.Key.Length == 1), "Single-character ids");
+        });
     }
 }
