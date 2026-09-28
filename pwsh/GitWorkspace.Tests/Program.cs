@@ -200,6 +200,7 @@ static partial class Tests
         UiTests();
         GroupUiTests();
         TabTests();
+        CommitTests();
         IgnoreTests();
         IgnoreDestinationTests();
         Console.WriteLine($"\n{passed} passed; {failed} failed. Temporary fixtures: {root}");
