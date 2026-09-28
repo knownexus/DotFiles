@@ -68,6 +68,19 @@ static partial class Tests
             model.Enter(); Equal(CommitLevel.FileDiff, model.Level, "Diff level"); Check(model.DiffTask()!.GetAwaiter().GetResult().Contains("+Main"), "File diff");
             Check(model.Back() && model.Level == CommitLevel.Files, "Back to files"); Check(model.Back() && model.Level == CommitLevel.Commits, "Back to commits"); Check(!model.Back(), "Already at top");
         });
+        Test("commits model retries after a faulted detail task instead of caching the failure", () => {
+            var repo = MergeRepo(); int attempts = 0;
+            var model = new CommitsModel(new("Test", repo, "HEAD", "Test"), (tip, filter, skip, count) => CommitGraph.Read(repo, tip, filter, null, skip, count),
+                (c, p) => { attempts++; if (attempts == 1) throw new InvalidOperationException("transient failure"); return CommitGraph.Detail(repo, c, p); },
+                (c, p, f) => CommitGraph.FileDiff(repo, c, p, f), rev => History.Resolve(repo, rev));
+            model.Load(); model.Focus = model.Rows.FindIndex(r => r.Commit?.Subject == "Merge side");
+            var first = model.DetailTask()!; Throws(() => first.GetAwaiter().GetResult(), "First attempt should fault");
+            Check(first.IsFaulted, "First task recorded as faulted");
+            var second = model.DetailTask()!; Check(!ReferenceEquals(first, second), "Faulted task not reused");
+            Equal("Side.txt", second.GetAwaiter().GetResult().Files.Single().Path, "Second attempt succeeds");
+            model.Enter(); Equal(CommitLevel.Files, model.Level, "Files level"); model.Enter(); Equal(CommitLevel.FileDiff, model.Level, "Diff level");
+            model.NextParent(); Equal(CommitLevel.Files, model.Level, "Next parent drops out of file diff");
+        });
         Test("commits model reports an unborn branch and an empty search without throwing", () => {
             var empty = Repo(initial: false); var model = CommitsModel.ForGit(new("Empty", empty, "HEAD", "Empty")); model.Load();
             Equal("No commits yet on this branch.", model.Empty, "Unborn"); Check(model.Commit is null && model.Rows.Count == 0, "No rows");

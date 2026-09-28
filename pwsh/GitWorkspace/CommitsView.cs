@@ -78,6 +78,7 @@ public sealed class CommitsModel(HistoryTarget target, Func<string, CommitFilter
     {
         if (Commit is not { } commit) return null;
         string key = commit.Hash + ":" + Parent; int parent = Parent;
+        if (details.TryGetValue(key, out var old) && old.IsFaulted) details.Remove(key);
         if (!details.TryGetValue(key, out var task)) details[key] = task = Task.Run(() => detail(commit, parent));
         return task;
     }
@@ -86,6 +87,7 @@ public sealed class CommitsModel(HistoryTarget target, Func<string, CommitFilter
     {
         if (Commit is not { } commit || File is not { } file) return null;
         string key = commit.Hash + ":" + Parent + ":" + file.Path; int parent = Parent;
+        if (diffs.TryGetValue(key, out var old) && old.IsFaulted) diffs.Remove(key);
         if (!diffs.TryGetValue(key, out var task)) diffs[key] = task = Task.Run(() => diff(commit, parent, file));
         return task;
     }
