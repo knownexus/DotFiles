@@ -7,6 +7,7 @@ public sealed record DiffLine(DiffKind Kind, int? Old, int? New, string Text);
 
 public sealed record DiffSides(string Old, string New)
 {
+    public static DiffSides Generic { get; } = new("before", "after");
     public static DiffSides ForChange(Change change) => change.Area switch {
         ChangeArea.Staged => new("HEAD", "staged (index)"),
         ChangeArea.Untracked => new("", "new file (not in Git)"),

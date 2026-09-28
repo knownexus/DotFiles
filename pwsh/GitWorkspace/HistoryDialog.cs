@@ -14,11 +14,22 @@ public sealed partial class Dialogs
         {
             var selected = commits.ElementAtOrDefault(focus);
             string id = selected?.Hash + ":" + parent;
-            if (id != previewId) { preview = selected is null ? "No commits on this branch." : detail(selected, parent); previewId = id; previewScroll = 0; }
+            if (id != previewId) {
+                preview = selected is null ? "No commits on this branch." :
+                    $"{selected.Hash}\n{selected.Author} · {selected.Date}\n\n{selected.Subject}\n\nEnter / D: open commit diff\n\nDiffs load only when requested." +
+                    (selected.Parents.Count > 1 ? $"\n\nCompare against parent {parent + 1}\n{selected.Parents[parent]}\nM: choose merge parent" : "");
+                previewId = id; previewScroll = 0;
+            }
             bool split = terminal.Width >= 118;
             int left = split ? Math.Clamp(terminal.Width / 2, 55, 90) : terminal.Width;
             var c = FullPage("History · " + title, terminal.Width < 100 ? "↑↓ · Enter patch · N/P pages · B branch · I rebase · Esc back" : "↑↓ select · Enter patch · N/P pages · B branch · I rebase from commit · Esc back");
-            c.Text(2, 2, "Tip " + tip[..Math.Min(12, tip.Length)] + " · page " + (page + 1) + " · R refresh · M merge parent · PgUp/PgDn scroll diff", Ink.Muted, c.Width - 4);
+            c.Text(2, 2, "Tip " + tip[..Math.Min(12, tip.Length)] + " · page " + (page + 1) + " · R refresh · M merge parent", Ink.Muted, c.Width - 4);
+            var hits = new HitMap();
+            if (selected is not null) {
+                const string open = "[D Open diff]";
+                c.Text(2, 3, open, Ink.Accent, c.Width - 4);
+                hits.Add(2, 3, Math.Min(open.Length, c.Width - 4), new Hit("diff"));
+            }
             int rows = Math.Max(1, c.Height - 9);
             if (focus < scroll) scroll = focus; if (focus >= scroll + rows) scroll = focus - rows + 1;
             for (int i = scroll; i < Math.Min(scroll + rows, commits.Count); i++) {
@@ -43,7 +54,12 @@ public sealed partial class Dialogs
             if (key.Key == ConsoleKey.End) focus = Math.Max(0, commits.Count - 1);
             if (key.Key == ConsoleKey.PageUp) previewScroll = Math.Max(0, previewScroll - rows);
             if (key.Key == ConsoleKey.PageDown) previewScroll = Math.Min(Math.Max(0, preview.Split('\n').Length - rows), previewScroll + rows);
-            if (key.Key == ConsoleKey.Enter) Message("Commit · " + selected?.ShortHash, preview);
+            if (selected is not null && (key.Key == ConsoleKey.Enter || char.ToLowerInvariant(key.Character) == 'd' ||
+                key.Mouse && key.Button != MouseButton.Right && hits.At(key.X, key.Y)?.Kind == "diff")) {
+                var patch = Busy("Loading commit diff", () => detail(selected, parent));
+                var sides = DiffSides.ForCommit(selected.Parents.ElementAtOrDefault(parent)?[..Math.Min(7, selected.Parents[parent].Length)] ?? "", selected.ShortHash, selected.Subject);
+                Review("Commit · " + selected.ShortHash, DiffView.Render(DiffView.Parse(patch), sides), confirm: false);
+            }
             if (key.Mouse && key.Wheel != 0) {
                 if (split && key.X > left) previewScroll = Math.Clamp(previewScroll + key.Wheel, 0, Math.Max(0, preview.Split('\n').Length - rows));
                 else focus = Math.Clamp(focus + key.Wheel, 0, Math.Max(0, commits.Count - 1));

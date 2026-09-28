@@ -40,6 +40,51 @@ public sealed partial class App
             case 5: RepoView(true); break;
         }
     }
+    void Tab(Hit hit, bool edit)
+    {
+        if (hit.Id == "tab-left" || hit.Id == "tab-right")
+        {
+            view.State.TabOffset = Math.Clamp(hit.Index, 0, Math.Max(0, view.Tabs().Count - 1));
+            return;
+        }
+        if (hit.Id == "new") { EditGroup(); return; }
+        if (hit.Id == "repo-close") { view.Back(); previewKey = ""; return; }
+        if (edit) { EditGroupTab(hit.Index); return; }
+        SelectTab(hit.Index);
+    }
+    void SelectTab(int index)
+    {
+        if (index < 0) return;
+        var tabs = view.Tabs();
+        var tab = tabs.FirstOrDefault(t => t.Index == index) ?? tabs.ElementAtOrDefault(index);
+        if (tab is null) return;
+        if (tab.Id.StartsWith("repo:", StringComparison.Ordinal)) return;
+        view.State.TabOffset = Math.Clamp(tab.Index, 0, Math.Max(0, tabs.Count - 1));
+        if (tab.Index == 0) view.Navigate(null, "All projects");
+        else if (tab.Index - 1 < settings.Groups.Count) view.Navigate(null, settings.Groups[tab.Index - 1].Name);
+        previewKey = "";
+    }
+    void EditCurrentTab()
+    {
+        if (view.RepoMode) { notice = "Repo View is temporary · Backspace closes it."; return; }
+        var index = view.State.Group == "All projects" ? 0 : settings.Groups.FindIndex(g => g.Name == view.State.Group) + 1;
+        EditGroupTab(index);
+    }
+    void EditGroupTab(int index)
+    {
+        if (index <= 0) { notice = "All projects has no saved membership to edit."; return; }
+        if (index - 1 >= settings.Groups.Count) return;
+        var group = settings.Groups[index - 1];
+        var pick = dialog.Choose(group.Name, ["Edit members", "Rename", "Duplicate", "Delete"]);
+        if (pick is null) return;
+        if (pick == 0) EditGroup(group);
+        if (pick == 1) CopyGroup(group, false);
+        if (pick == 2) CopyGroup(group, true);
+        if (pick == 3 && dialog.Review("Delete group", "Delete the saved membership of " + group.Name + "? Repository files, branches and worktrees stay in place.", "Delete group"))
+        {
+            settings.Groups.Remove(group); Config.Save(configPath, settings); view.Navigate(null, "All projects"); previewKey = "";
+        }
+    }
     WorkspaceGroup? PickGroup(string title)
     {
         var pick = dialog.Choose(title, settings.Groups.Select(g => g.Name).ToList(), Math.Max(0, settings.Groups.FindIndex(g => g.Name == view.State.Group)));

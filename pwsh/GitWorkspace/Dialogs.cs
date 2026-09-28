@@ -128,18 +128,20 @@ public sealed partial class Dialogs(ISurface terminal)
     {
         int start = text.StartsWith("diff --", StringComparison.Ordinal) ? 0 : text.IndexOf("\ndiff --", StringComparison.Ordinal) + 1;
         if (start <= 0 && !text.StartsWith("diff --", StringComparison.Ordinal)) start = Math.Max(0, text.IndexOf("\n@@ ", StringComparison.Ordinal) + 1);
-        return [.. Styled.FromText(text[..start].TrimEnd('\n')).Where(_ => start > 0), .. DiffView.Render(DiffView.Parse(text[start..]), null)];
+        return [.. Styled.FromText(text[..start].TrimEnd('\n')).Where(_ => start > 0), .. DiffView.Render(DiffView.Parse(text[start..]), DiffSides.Generic)];
     }
     public bool Review(string title, IReadOnlyList<StyledLine> lines, string accept = "Execute", bool confirm = true)
     {
-        var backdrop = Backdrop(); int scroll = 0;
+        var backdrop = Backdrop(); int scroll = 0, horizontal = 0;
         while (true)
         {
             var (c, inner) = Frame(backdrop, title, confirm ? $"↑↓ PgUp PgDn scroll · Enter {accept} · Esc cancel" : "↑↓ PgUp PgDn scroll · Enter / Esc close",
                 (int)(terminal.Width * 0.9), (int)(terminal.Height * 0.9));
+            var visible = Styled.Fit(lines, inner.Width);
             int count = Math.Max(1, inner.Height);
-            scroll = Math.Clamp(scroll, 0, Math.Max(0, lines.Count - count));
-            Styled.Draw(c, inner, lines, scroll);
+            scroll = Math.Clamp(scroll, 0, Math.Max(0, visible.Count - count));
+            horizontal = Math.Clamp(horizontal, 0, Math.Max(0, Styled.MaxWidth(visible) - inner.Width));
+            Styled.Draw(c, inner, visible, scroll, horizontal);
             terminal.Draw(c); var key = terminal.Read();
             if (Cancel(key) || Outside(key, inner)) return false;
             if (key.Key == ConsoleKey.Enter) return confirm;
@@ -148,7 +150,9 @@ public sealed partial class Dialogs(ISurface terminal)
             if (key.Key == ConsoleKey.PageUp) scroll -= count;
             if (key.Key == ConsoleKey.PageDown) scroll += count;
             if (key.Key == ConsoleKey.Home) scroll = 0;
-            if (key.Key == ConsoleKey.End) scroll = lines.Count - count;
+            if (key.Key == ConsoleKey.End) scroll = visible.Count - count;
+            if (key.Key == ConsoleKey.LeftArrow) horizontal -= Math.Max(4, inner.Width / 4);
+            if (key.Key == ConsoleKey.RightArrow) horizontal += Math.Max(4, inner.Width / 4);
             if (key.Mouse) scroll += key.Wheel;
         }
     }

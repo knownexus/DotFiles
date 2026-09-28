@@ -41,10 +41,11 @@ A missing worktree is reported, never silently labelled clean.
 | Action | Key |
 |---|---|
 | Move focus / select checkbox | Arrow keys / Space; mouse supported on Windows |
-| Review full diff | Enter |
+| Open diff on demand | Enter / D; or click Open diff |
 | Collapse a project or worktree | Left / Right, or click the disclosure arrow |
-| Changes / worktree selection | Tab, or click the view label |
+| Changes / worktree selection | Tab, or click Changes / Worktrees in the view bar |
 | Select all visible / clear selection | A / X |
+| Resize the preview split | < / > |
 | Search / filter | / / F |
 | Show / hide untracked files | T, click Untracked in the toolbar, or F → Show/hide untracked |
 | Add files or patterns to the project's .gitignore | G, or M → Add files or patterns to .gitignore |
@@ -60,6 +61,7 @@ A missing worktree is reported, never silently labelled clean.
 | Hunk staging, discard, stash, tools, activity, registration | M |
 | Open focused file in editor | O |
 | Refresh local state / quit | R / Q |
+| Keys for the focused row | footer; ? lists every key |
 | Help | ? |
 
 Checkboxes mean **selected**, not **staged**. A file with staged and unstaged
@@ -77,14 +79,28 @@ account for untracked files, including checks that require a clean checkout.
 `G` adds selected (or highlighted) untracked files to `.gitignore`, or lets you enter
 a pattern such as `*.log`, `build/` or `/local.json`. File selections become literal,
 root-anchored rules, so names containing brackets or wildcard characters do not hide
-unrelated files. Custom patterns use normal Git syntax. You can choose multiple
-worktrees; each gets an edit to its own root `.gitignore`, with a preview before writing.
+unrelated files. Custom patterns use normal Git syntax. Both actions open a destination
+checklist with project separators, branch names and worktree paths. Choose one or more
+destinations, including worktrees outside the current group. Selected file paths can
+target another worktree in the same repository; the source files stay in place.
+For a local branch that is not checked out, choose a new worktree directory. The review
+includes worktree creation and ignore rules before either is written. Each chosen
+worktree gets an edit to its own root `.gitignore`.
 Existing contents and staged changes are preserved. Review and commit the resulting
 `.gitignore` edit normally. This does not remove already tracked files from Git.
 
-Wide terminals show a diff alongside the list. Narrow terminals use Enter for
-a full-width preview. Minimum size is 66 columns by 16 rows. Mouse support uses
-Windows console input; other platforms have a keyboard fallback.
+Diffs load only on demand: press `Enter` / `D`, or click **Open diff**. Moving through
+files never loads their contents or runs a diff. Terminals of 100 columns or more show
+basic details beside the list; `<` / `>` resize the split (remembered between launches).
+The requested diff opens in a large popup, including on narrow terminals.
+Minimum size is 66 columns by 16 rows. Menus and prompts open as popups over the main
+screen; Esc or a click outside closes them.
+
+File rows use Git's two-letter status: the left letter is the staged side, the right
+letter the unstaged side (` M`, `M `, `A `, `D `, `R `, `??`, `UU`). Every diff starts
+with a legend naming its sides, for example `− old: staged (index)   + new: working tree`,
+and shows separate `old` / `new` line numbers. Removed lines have a red background and
+`−`; added lines a green background and `+`.
 
 Branch, Sync and Commit open a separate worktree checklist. This includes clean
 worktrees that still have commits to push. File checkboxes never implicitly decide
@@ -145,8 +161,9 @@ create a new worktree for the existing branch. The shell stays in its original d
 
 `H` opens commit history for the focused branch/worktree; on a project heading it
 offers a branch/worktree picker. Repo View also opens history with Enter on those rows.
-History shows hash, date, author and subject. Enter opens the full message, file
-summary and patch. Wide terminals also show the patch beside the list. `M` chooses
+History shows hash, date, author and subject. `Enter` / `D` (or **Open diff**) loads the
+full message, file summary and patch. Moving between commits does not load patches.
+Wide terminals show basic commit details beside the list. `M` chooses
 which parent to compare for a merge commit, and `PgUp` / `PgDn` scroll the preview.
 `N` / `P` page through the full history, `B` selects another branch/worktree, and `R`
 refreshes. History pins the tip while browsing, so new commits do not shift pages.

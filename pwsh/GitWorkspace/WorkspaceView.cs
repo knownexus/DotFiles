@@ -2,6 +2,7 @@ namespace GitWorkspace;
 
 public sealed record Row(string Id, string Kind, string Text, Worktree? Tree = null, Change? Change = null, string? Project = null, BranchInfo? Branch = null);
 public sealed record ViewLocation(string Group, string? Repo, bool Worktrees, string Search, string Filter, string? Focus, int Scroll);
+public sealed record GroupTab(int Index, string Label, bool Active, int Count, string Id);
 public enum ViewMode { Changes, Worktrees, Commits }
 
 public sealed class WorkspaceView(Settings settings, ViewState state)
@@ -38,6 +39,23 @@ public sealed class WorkspaceView(Settings settings, ViewState state)
         return Snapshot.Branches.Where(b => RepoMode ? b.Project == State.Repo : group is not null && group.Branches.Any(s => s.Project == b.Project && s.Ref == b.Ref))
             .Where(b => !Snapshot.Worktrees.Any(t => t.Project == b.Project && t.ActiveBranchRef == b.Ref));
     }
+    public List<GroupTab> Tabs()
+    {
+        List<GroupTab> tabs = [new(0, "All projects", !RepoMode && State.Group == "All projects", Count(null, null), "group:0")];
+        for (int i = 0; i < Settings.Groups.Count; i++)
+        {
+            var group = Settings.Groups[i];
+            tabs.Add(new(i + 1, group.Name, !RepoMode && State.Group == group.Name, Count(group, null), "group:" + (i + 1)));
+        }
+        if (RepoMode && State.Repo is not null)
+            tabs.Add(new(tabs.Count, "⌂ " + State.Repo, true, Count(null, State.Repo), "repo:" + State.Repo));
+        return tabs;
+    }
+    int Count(WorkspaceGroup? group, string? repo) => Snapshot.Worktrees
+        .Where(t => repo is not null ? t.Project == repo : group is null || group.Includes(t))
+        .SelectMany(t => t.Changes.Select(c => t.FileId(c)))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Count();
     public void Navigate(string? repo, string? group = null)
     {
         back.Push(new(State.Group, State.Repo, WorktreeMode, Search, Filter, Current?.Id, Scroll));
@@ -176,7 +194,7 @@ public static class Screen
     };
     public static Canvas Render(WorkspaceView view, int width, int height, string preview, int previewScroll, string notice, bool refreshing) =>
         Render(view, Layout.For(width, height, view.State.SplitRatio), new HitMap(),
-            DiffView.LooksLikeDiff(preview) ? DiffView.Render(DiffView.Parse(preview), null) : Styled.FromText(preview), previewScroll, notice, refreshing);
+            DiffView.LooksLikeDiff(preview) ? DiffView.Render(DiffView.Parse(preview), DiffSides.Generic) : Styled.FromText(preview), previewScroll, notice, refreshing);
 
     public static Canvas Render(WorkspaceView view, Layout layout, HitMap hits, IReadOnlyList<StyledLine> preview, int previewScroll, string notice, bool refreshing,
         Action<Canvas, Layout, HitMap>? body = null)
@@ -186,6 +204,7 @@ public static class Screen
         if (width < Layout.MinWidth || height < Layout.MinHeight) { c.Text(1, 1, "Git Workspace", Ink.Heading); c.Text(1, 3, "Enlarge terminal to at least 66 columns × 16 rows."); c.Text(1, 5, "Q quit"); return c; }
         c.Text(2, layout.Title.Y, "GIT WORKSPACE", Ink.Heading);
         c.Text(20, layout.Title.Y, view.ScopeLabel + (refreshing ? "  · refreshing…" : ""), Ink.Accent, width - 22);
+        GroupTabs(c, layout.Tabs, hits, view);
         ViewBar(c, layout.ViewBar, hits, view);
         c.Line(layout.ViewBar.Y + 1);
         if (body is not null) body(c, layout, hits);
@@ -193,14 +212,79 @@ public static class Screen
         if (layout.Split) {
             for (int y = layout.Preview.Y; y < layout.Preview.Bottom; y++) c.Text(layout.Preview.X - 1, y, "│", Ink.Border);
             var area = new Rect(layout.Preview.X + 1, layout.Preview.Y, layout.Preview.Width - 2, layout.Preview.Height);
-            if (body is null) Styled.Draw(c, area, preview, previewScroll);
             hits.Add(layout.Preview, new Hit("preview"));
+            if (body is null) {
+                if (view.Current?.Change is not null) {
+                    const string open = "[D Open diff]";
+                    c.Text(area.X, area.Y, open, Ink.Accent, area.Width);
+                    hits.Add(area.X, area.Y, Math.Min(open.Length, area.Width), new Hit("action", Id: "d"));
+                    area = new Rect(area.X, area.Y + 2, area.Width, Math.Max(0, area.Height - 2));
+                }
+                Styled.Draw(c, area, preview, previewScroll);
+            }
         }
         c.Line(layout.Context.Y - 1);
         string selection = view.WorktreeMode ? $"{view.Targets.Count} worktrees selected" : $"{view.Selected.Count} changes selected" + (view.HiddenSelections > 0 ? $" · {view.HiddenSelections} hidden" : "");
         c.Text(2, layout.Context.Y, selection + "  · " + notice, Ink.Muted, width - 4);
         Footer.Render(c, layout.Footer, hits, Footer.For(view, null));
         return c;
+    }
+    static void GroupTabs(Canvas c, Rect bar, HitMap hits, WorkspaceView view)
+    {
+        var tabs = view.Tabs();
+        if (tabs.Count == 0 || bar.Width < 10) return;
+        int plusX = Math.Max(2, bar.Right - 5);
+        c.Text(plusX, bar.Y, " + ", Ink.Accent);
+        hits.Add(plusX, bar.Y, 3, new Hit("tab", -1, "new"));
+
+        int offset = Math.Clamp(view.State.TabOffset, 0, Math.Max(0, tabs.Count - 1));
+        int active = Math.Max(0, tabs.FindIndex(t => t.Active));
+        while (active >= offset + VisibleTabCount(tabs, offset, 2 + (offset > 0 ? 2 : 0), plusX - 2) && offset < active) offset++;
+        view.State.TabOffset = offset;
+
+        int x = 2;
+        if (offset > 0)
+        {
+            c.Text(x, bar.Y, "‹", Ink.Accent);
+            hits.Add(x, bar.Y, 1, new Hit("tab", offset - 1, "tab-left"));
+            x += 2;
+        }
+        bool more = false;
+        for (int i = offset; i < tabs.Count; i++)
+        {
+            var tab = tabs[i];
+            string label = tab.Label + (tab.Count > 0 ? " " + tab.Count : "");
+            if (tab.Id.StartsWith("repo:", StringComparison.Ordinal)) label += " ×";
+            string text = tab.Active ? "[" + label + "]" : " " + label + " ";
+            if (x + text.Length >= plusX - 2) { more = true; break; }
+            c.Text(x, bar.Y, text, tab.Active ? Ink.Heading : Ink.Muted);
+            hits.Add(x, bar.Y, text.Length, new Hit("tab", tab.Index, tab.Id));
+            if (tab.Id.StartsWith("repo:", StringComparison.Ordinal))
+            {
+                int close = x + Math.Max(0, text.LastIndexOf('×'));
+                hits.Add(close, bar.Y, 1, new Hit("tab", tab.Index, "repo-close"));
+            }
+            x += text.Length + 1;
+        }
+        if (more)
+        {
+            int rightX = Math.Max(x, plusX - 2);
+            c.Text(rightX, bar.Y, "›", Ink.Accent);
+            hits.Add(rightX, bar.Y, 1, new Hit("tab", offset + 1, "tab-right"));
+        }
+    }
+    static int VisibleTabCount(IReadOnlyList<GroupTab> tabs, int offset, int x, int right)
+    {
+        int count = 0;
+        for (int i = offset; i < tabs.Count; i++)
+        {
+            var tab = tabs[i];
+            string label = tab.Label + (tab.Count > 0 ? " " + tab.Count : "") + (tab.Id.StartsWith("repo:", StringComparison.Ordinal) ? " ×" : "");
+            string text = tab.Active ? "[" + label + "]" : " " + label + " ";
+            if (x + text.Length >= right) break;
+            x += text.Length + 1; count++;
+        }
+        return Math.Max(1, count);
     }
     static void ViewBar(Canvas c, Rect bar, HitMap hits, WorkspaceView view)
     {

@@ -5,7 +5,7 @@ public static class Footer
     public static List<(string Key, string Label)> For(WorkspaceView view, object? commits)
     {
         List<(string, string)> keys = view.Current?.Kind switch {
-            "file" when !view.WorktreeMode => [(" ", "Space select"), ("s", "Stage"), ("u", "Unstage"), ("c", "Commit…"), ("o", "Open"), ("\r", "Enter review"), ("m", "More…")],
+            "file" when !view.WorktreeMode => [(" ", "Space select"), ("d", "Diff"), ("s", "Stage"), ("u", "Unstage"), ("c", "Commit…"), ("o", "Open"), ("m", "More…")],
             "branch" => [("\r", "Enter history"), ("b", "Checkout…"), ("p", "Repo")],
             "worktree" or "project" when view.WorktreeMode => [(" ", "Space select"), ("c", "Commit…"), ("b", "Branch…"), ("y", "Sync…"), ("h", "History"), ("p", "Repo"), ("i", "Rebase…"), ("m", "More…")],
             "worktree" or "project" => [(" ", "Space select"), ("c", "Commit…"), ("b", "Branch…"), ("y", "Sync…"), ("h", "History"), ("p", "Repo"), ("m", "More…")],

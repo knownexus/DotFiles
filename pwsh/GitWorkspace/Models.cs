@@ -17,6 +17,7 @@ public sealed class Settings
     public int Version { get; set; } = 1;
     public List<Project> Projects { get; set; } = [];
     public List<WorkspaceGroup> Groups { get; set; } = [];
+    public List<string>? Roots { get; set; }
     public int RefreshSeconds { get; set; } = 5;
     public string Editor { get; set; } = "vim";
     public List<string> EditorArguments { get; set; } = [];
@@ -29,6 +30,7 @@ public sealed class ViewState
     public bool ShowUntracked { get; set; } = true;
     public HashSet<string> Collapsed { get; set; } = [];
     public double SplitRatio { get; set; } = 0.5;
+    public int TabOffset { get; set; }
 }
 
 public static class Config

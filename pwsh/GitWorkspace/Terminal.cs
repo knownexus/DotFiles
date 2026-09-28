@@ -19,6 +19,8 @@ public sealed class Terminal : ISurface, IDisposable
     uint inputMode, outputMode;
     bool native, active;
     uint previousButtons;
+    Input? repeatedKey;
+    int remainingRepeats;
     string[]? previousLines;
     int previousWidth;
     readonly Encoding oldEncoding = Console.OutputEncoding;
@@ -53,6 +55,7 @@ public sealed class Terminal : ISurface, IDisposable
     }
     public Input? Poll(int milliseconds = 50)
     {
+        if (remainingRepeats > 0) { remainingRepeats--; return repeatedKey; }
         var until = Environment.TickCount64 + milliseconds;
         do
         {
@@ -61,13 +64,19 @@ public sealed class Terminal : ISurface, IDisposable
                 if (GetNumberOfConsoleInputEvents(input, out var count) && count > 0)
                 {
                     if (!ReadConsoleInputW(input, out var record, 1, out _)) return null;
-                    if (record.Type == 1 && record.Down != 0)
-                        return new((ConsoleKey)record.Key, record.Character, (record.Control & 0x000C) != 0, (record.Control & 0x0010) != 0);
+                    if (record.Type == 1 && record.Down != 0) {
+                        repeatedKey = new((ConsoleKey)record.Key, record.Character, (record.Control & 0x000C) != 0, (record.Control & 0x0010) != 0);
+                        remainingRepeats = Math.Max(0, record.RepeatCount - 1);
+                        return repeatedKey;
+                    }
                     if (record.Type == 2)
                     {
                         var mouse = MouseDecoder.Decode(record.Buttons, record.Flags, record.X, record.Y, ref previousButtons);
                         if (mouse is not null) return mouse;
                     }
+                    // Drain key-up and mouse-move records without sleeping
+                    // between queued records.
+                    continue;
                 }
             }
             else if (Console.KeyAvailable)
@@ -102,6 +111,7 @@ public sealed class Terminal : ISurface, IDisposable
     {
         [FieldOffset(0)] public ushort Type;
         [FieldOffset(4)] public int Down;
+        [FieldOffset(8)] public ushort RepeatCount;
         [FieldOffset(10)] public ushort Key;
         [FieldOffset(14)] public char Character;
         [FieldOffset(16)] public uint Control;

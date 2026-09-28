@@ -24,10 +24,58 @@ public static class Ignore
     }
     public static Plan Files(Worktree tree, IEnumerable<Change> files)
     {
-        var selected = files.ToList();
-        if (selected.Count == 0 || selected.Any(c => c.Area != ChangeArea.Untracked))
+        return FilesTo(tree, files.Select(c => (tree, c)).ToList());
+    }
+    public static List<string> FileRules(IReadOnlyList<(Worktree Tree, Change Change)> selected)
+    {
+        if (selected.Count == 0 || selected.Any(c => c.Change.Area != ChangeArea.Untracked))
             throw new InvalidOperationException("Select untracked files to ignore. Already tracked files stay tracked; adding an ignore rule does not remove them from Git.");
-        return Patterns(tree, selected.Select(c => Literal(c.Path)), selected.Select(c => c.Path).ToList());
+        foreach (var group in selected.GroupBy(c => c.Tree.Id)) {
+            var tree = group.First().Tree; Git.LoadStatus(tree);
+            if (!tree.Usable || group.Any(f => !tree.Changes.Any(c => c.Path == f.Change.Path && c.Area == ChangeArea.Untracked)))
+                throw new InvalidOperationException("A selected file is no longer untracked. Refresh and review the selection again.");
+        }
+        return selected.Select(c => Literal(c.Change.Path)).Distinct(StringComparer.Ordinal).ToList();
+    }
+    public static Plan FilesTo(Worktree destination, IReadOnlyList<(Worktree Tree, Change Change)> selected)
+    {
+        if (selected.Any(f => !IgnoreDestinations.SameRepository(f.Tree.CommonDir, destination.CommonDir)))
+            throw new InvalidOperationException("Choose destination branches/worktrees in the same repository as the selected files.");
+        var rules = FileRules(selected);
+        var local = selected.Where(f => f.Tree.Id == destination.Id).Select(f => f.Change.Path).Distinct().ToList();
+        var plan = Patterns(destination, rules, local);
+        return new() {
+            Tree = plan.Tree, Action = plan.Action, State = plan.State, Expected = plan.Expected, Execute = plan.Execute,
+            Preview = "Paths selected from:\n" + string.Join('\n', selected.Select(f => f.Tree.Title + " · " + f.Change.Path)) + "\n\n" + plan.Preview
+        };
+    }
+    static List<string> ValidateRules(IEnumerable<string> patterns)
+    {
+        var rules = patterns.Distinct(StringComparer.Ordinal).ToList();
+        if (rules.Count == 0 || rules.Any(p => string.IsNullOrWhiteSpace(p) || p.Any(c => c is '\r' or '\n' or '\0') || p.StartsWith('#')))
+            throw new InvalidOperationException("Enter one Git ignore pattern per entry. Escape a leading # as \\# to match it literally.");
+        return rules;
+    }
+    public static Plan NewWorktree(BranchInfo branch, Project project, string directory, IEnumerable<string> patterns)
+    {
+        var rules = ValidateRules(patterns);
+        var create = Operations.ExistingWorktree(branch, project, directory);
+        // Other destinations in the same batch may create unrelated worktrees.
+        // Guard this branch and directory; Git itself refuses occupied branches.
+        string State() => History.Resolve(branch.CommonDir, branch.Ref) + "\0" + File.Exists(create.Tree.Path) + "\0" + Directory.Exists(create.Tree.Path);
+        return new() {
+            Tree = create.Tree, Action = "Add to .gitignore", State = State, Expected = State(),
+            Preview = create.Preview + "\n\nFile: " + Path.Combine(create.Tree.Path, ".gitignore") + "\nAppend rules:\n" +
+                string.Join('\n', rules.Select(r => "+ " + r)) + "\n\nCreate this worktree, then leave the .gitignore edit unstaged for review and commit. Existing worktrees keep their current branch and files.",
+            Execute = () => {
+                var result = create.Execute(); if (!result.Ok) return result;
+                try {
+                    var edit = Patterns(create.Tree, rules).Run();
+                    return new(edit.Success ? 0 : 1, "Created worktree: " + create.Tree.Path + "\n" + edit.Detail, "");
+                }
+                catch (Exception e) { return new(1, "", "Worktree created at " + create.Tree.Path + "; .gitignore was not updated: " + e.Message); }
+            }
+        };
     }
     public static Plan Patterns(Worktree tree, IEnumerable<string> patterns, List<string>? selectedPaths = null)
     {
@@ -37,9 +85,7 @@ public static class Ignore
             throw new InvalidOperationException("Resolve the .gitignore conflict before adding rules.");
         if (selectedPaths is not null && selectedPaths.Any(p => !tree.Changes.Any(c => c.Path == p && c.Area == ChangeArea.Untracked)))
             throw new InvalidOperationException("A selected file is no longer untracked. Refresh and review the selection again.");
-        var rules = patterns.Distinct(StringComparer.Ordinal).ToList();
-        if (rules.Count == 0 || rules.Any(p => string.IsNullOrWhiteSpace(p) || p.Any(c => c is '\r' or '\n' or '\0') || p.StartsWith('#')))
-            throw new InvalidOperationException("Enter one Git ignore pattern per entry. Escape a leading # as \\# to match it literally.");
+        var rules = ValidateRules(patterns);
         string path = Path.Combine(tree.Path, ".gitignore"); bool existed = File.Exists(path); var original = Read(path);
         if (original.Contains((byte)0)) throw new InvalidOperationException("The .gitignore contains NUL bytes. Convert it to UTF-8 in your editor first.");
         string text = Encoding.UTF8.GetString(original);

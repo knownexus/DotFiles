@@ -67,6 +67,20 @@ static partial class Tests
             var alternate = Path.Combine(root, "bare alternate"); Directory.CreateDirectory(alternate);
             Git.Run(source, "clone", "--bare", source, Path.Combine(alternate, ".bare")).Require();
             Check(Git.ResolveRepository(alternate).Replace('\\', '/').EndsWith("/.bare"), "Alternative layout");
+            var discovered = Discovery.ScanRoot(root, [new("Already", project)]);
+            Check(discovered.Any(r => r.Name.StartsWith("repo ") && !r.Registered), "Normal repo not discovered");
+            var bareDiscovery = discovered.Single(r => r.Path == Path.GetFullPath(project));
+            Equal("Already", bareDiscovery.RegisteredName, "Registered common dir not matched");
+            Check(discovered.Any(r => r.Path == Path.GetFullPath(alternate)), "Alternative .bare layout not discovered");
+            Equal(discovered.Select(r => r.CommonDir).Distinct(StringComparer.OrdinalIgnoreCase).Count(), discovered.Count, "Discovery duplicated common dirs");
+            var rootSettings = Discovery.SettingsForRoot(root, new() { Projects = [new("Already", project)] });
+            Check(rootSettings.Projects.Any(p => p.Name == "Already" && p.Path == Path.GetFullPath(project)), "Root settings did not preserve registered name");
+            var roundTrip = Path.Combine(root, "roots.json");
+            Config.Save(roundTrip, new Settings { Roots = [root], Projects = [new("Already", project)] });
+            var loaded = Config.Read(roundTrip);
+            Equal(Path.GetFullPath(root), Discovery.Roots(loaded).Single(), "Roots setting round-trip");
+            var old = Path.Combine(root, "old roots.json"); File.WriteAllText(old, "{\"Version\":1,\"Projects\":[],\"Groups\":[]}");
+            Check(Discovery.Roots(Config.Read(old)).SequenceEqual(Discovery.DefaultRoots()), "Old settings should use default roots");
         });
         Test("stale registrations are reported and never treated as clean", () => {
             var path = Repo(); var linked = Path.Combine(root, "stale worktree"); var moved = Path.Combine(root, "moved worktree");
@@ -199,6 +213,7 @@ static partial class Tests
         if (!args.Contains("--ignore")) GroupHistoryTests();
         UiTests();
         IgnoreTests();
+        IgnoreDestinationTests();
         Console.WriteLine($"\n{passed} passed; {failed} failed. Temporary fixtures: {root}");
         return failed == 0 ? 0 : 1;
     }

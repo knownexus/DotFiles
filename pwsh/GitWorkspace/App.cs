@@ -33,7 +33,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
                 UpdatePreview();
                 var layout = Layout.For(terminal.Width, terminal.Height, view.State.SplitRatio);
                 terminal.Draw(Screen.Render(view, layout, hits, previewLines, previewScroll, notice, scan is not null));
-                var key = terminal.Poll(120);
+                var key = terminal.Poll(30);
                 if (key is null) continue;
                 try { Handle(key); } catch (Exception e) { dialog.Message("Unable to complete action", e.Message); notice = "Action stopped; open Activity for completed operations."; }
             }
@@ -56,9 +56,9 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         previewKey = key; if (moved) previewScroll = 0;
         if (row?.Change is not null)
         {
-            string diff = demo ? Demo.Diff : Git.Diff(row.Tree!, row.Change);
-            bool stale = !demo && view.SelectionStamps.TryGetValue(row.Id, out var stamp) && stamp != Operations.ChangeStamp(row.Tree!, row.Change);
-            preview = diff; previewLines = PreviewFor(row.Tree!, row.Change, diff, stale); return;
+            // Navigation reads only the existing snapshot; a diff is loaded by
+            // ShowPreview after an explicit key press or click.
+            preview = $"{row.Tree!.Title}\n{row.Change.Area} · {row.Change.Path}\n\nEnter / D: open diff\n\nDiffs load only when requested.";
         }
         else if (row?.Branch is { } branch)
             preview = $"{branch.Project} / {branch.Name}\n\nNot checked out in a worktree.\n{branch.Head}\n{branch.Subject}\n\nH / Enter: review commit history\nP: open this repository\n\nA branch group entry follows this branch wherever it is checked out.";
@@ -70,6 +70,24 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         else preview = string.Join("\n\n", view.InGroup().Where(t => row?.Project is null || t.Project == row.Project).Select(t => t.Title + "\n" + t.Summary)) +
             (view.Snapshot.Errors.Count > 0 ? "\n\nProject errors:\n" + string.Join('\n', view.Snapshot.Errors) : "");
         previewLines = Styled.FromText(preview);
+    }
+    void ShowPreview()
+    {
+        if (view.Current?.Kind == "branch" || view.RepoMode && view.Current?.Kind == "worktree") { BrowseHistory(); return; }
+        UpdatePreview();
+        var lines = previewLines;
+        if (view.Current is { Tree: { } tree, Change: { } change } row) {
+            view.SelectionStamps.TryGetValue(row.Id, out var selectedStamp);
+            lines = dialog.Busy("Loading file diff", () => {
+                string diff = demo ? Demo.Diff : Git.Diff(tree, change);
+                // Reuse the diff when checking a tracked selection, instead of
+                // launching a second identical Git process.
+                bool stale = !demo && selectedStamp is not null && selectedStamp !=
+                    (change.Area == ChangeArea.Untracked ? Operations.ChangeStamp(tree, change) : Operations.Digest(diff));
+                return PreviewFor(tree, change, diff, stale);
+            });
+        }
+        dialog.Review("Preview · " + (view.Current?.Text ?? "Workspace"), lines, confirm: false);
     }
     public static List<StyledLine> PreviewFor(Worktree tree, Change change, string diff, bool changedSinceSelection)
     {
@@ -93,6 +111,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
             if (key.Button == MouseButton.Right && hit?.Kind != "tab") return;
             switch (hit?.Kind)
             {
+                case "tab": Tab(hit, key.Button == MouseButton.Right); break;
                 case "view": SetMode((ViewMode)hit.Index); break;
                 case "action": HandleAction(hit.Id!); break;
                 case "check": view.Focus = hit.Index; view.Toggle(view.Current); break;
@@ -102,6 +121,8 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
             return;
         }
         if (key.Control && key.Key == ConsoleKey.C) { quit = true; return; }
+        if (key.Control && key.Key == ConsoleKey.N) { EditGroup(); return; }
+        if (key.Character >= '1' && key.Character <= '9') { SelectTab(key.Character - '1'); return; }
         if (key.Key == ConsoleKey.UpArrow) { view.Focus = Math.Max(0, view.Focus - 1); return; }
         if (key.Key == ConsoleKey.DownArrow) { view.Focus = Math.Min(Math.Max(0, view.Rows.Count - 1), view.Focus + 1); return; }
         if (key.Key == ConsoleKey.PageUp) { previewScroll = Math.Max(0, previewScroll - 10); return; }
@@ -109,7 +130,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (key.Key == ConsoleKey.Spacebar) { view.Toggle(view.Current); return; }
         if (key.Key is ConsoleKey.LeftArrow or ConsoleKey.RightArrow) { Collapse(); return; }
         if (key.Key == ConsoleKey.Tab) { SetMode(view.WorktreeMode ? ViewMode.Changes : ViewMode.Worktrees); return; }
-        if (key.Key == ConsoleKey.Enter) { if (view.Current?.Kind == "branch" || view.RepoMode && view.Current?.Kind == "worktree") BrowseHistory(); else dialog.Review("Preview · " + (view.Current?.Text ?? "Workspace"), previewLines, confirm: false); return; }
+        if (key.Key == ConsoleKey.Enter) { ShowPreview(); return; }
         if (key.Key == ConsoleKey.Backspace) { view.Back(); previewKey = ""; return; }
         if (key.Key == ConsoleKey.Escape) { view.Search = ""; view.Filter = "All changes"; view.Rebuild(); return; }
         switch (char.ToLowerInvariant(key.Character))
@@ -121,6 +142,8 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
             case 'f': FilterChanges(); break;
             case 't': ToggleUntracked(); break;
             case 'g': IgnoreMenu(); break;
+            case 'd': ShowPreview(); break;
+            case 'e': EditCurrentTab(); break;
             case 'w': Workspace(); break;
             case 'p': RepoView(); break;
             case 'h': BrowseHistory(); break;
@@ -338,7 +361,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
             ("## Tools", null),
             ("Open configured diff tool", () => ExternalGit(false)), ("Open configured merge tool", () => ExternalGit(true)),
             ("## Repos & groups", null),
-            ("Add project…", AddProject), ("Remove project from workspace…", RemoveProject), ("Remove saved group…", RemoveGroup),
+            ("Add project…", AddProject), ("Remove project from workspace…", RemoveProject), ("Search folders…", SearchFolders), ("Remove saved group…", RemoveGroup),
             ("## Admin", null),
             ("Activity and results", ShowActivity), ("Retry failed actions from last batch…", RetryFailed), ("Diagnostics", Diagnostics), ("Help", Help)
         ];
@@ -390,6 +413,18 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (settings.Projects.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("Project name already exists.");
         settings.Projects.Add(new(name, path)); Config.Save(configPath, settings); view.Navigate(null, "All projects"); Refresh();
     }
+    void SearchFolders()
+    {
+        if (!CanWrite()) return;
+        var current = string.Join("; ", Discovery.Roots(settings));
+        var text = dialog.Text("Search folders", "Semicolon-separated folders scanned when creating or editing project groups.", current);
+        if (text is null) return;
+        var roots = text.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(Path.GetFullPath).Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToList();
+        foreach (var root in roots) if (!Directory.Exists(root)) throw new InvalidOperationException("Folder does not exist: " + root);
+        settings.Roots = roots; Config.Save(configPath, settings);
+        notice = roots.Count == 0 ? "Search folders cleared." : roots.Count + " search folder(s) saved.";
+    }
     void Editor()
     {
         if (!CanWrite() || view.Current is not { Tree: not null, Change: not null } row) return;
@@ -422,14 +457,15 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         Execute([Patches.Plan(row.Tree, row.Change, patch, selected, unstage)]);
     }
     void Help() => dialog.Message("Git Workspace · help", "Checkboxes select items for an action. They do not stage files. Staged rows show exactly what is in Git's index.\n\n" +
-        "↑ ↓   Move focus                  Space / click checkbox   Select\nEnter  Review diff / history       ← →   Collapse section\nTab    Changes / Worktrees          A     Select all visible\nX      Clear selections             /     Search paths and branches\nF      Filters                      W     Switch / manage project groups\nP      Repo View                    H     Commit history\n[ / ]  Cycle group or repo          Backspace   Previous view\nI      Interactive rebase / manage paused rebase\nS      Stage selected               U     Unstage selected\nC      Commit staged files          B     Branch / rebase / revert\nY      Fetch / push / pull          M     More actions and activity\nO      Editor                      R     Refresh local status\nPgUp / PgDn / mouse wheel in preview  Scroll diff\nEsc    Clear search and filter      Q     Quit\n\n" +
+        "↑ ↓   Move focus                  Space / click checkbox   Select\nEnter/D  Open diff / history       ← →   Collapse section\nTab    Changes / Worktrees          A     Select all visible\n<  >  Resize the preview split\nX      Clear selections             /     Search paths and branches\nF      Filters                      W     Switch / manage project groups\n1-9    Jump group tab               Ctrl+N  New project group\nE      Edit current group tab       P     Repo View\nH      Commit history               [ / ]  Cycle group or repo\nBackspace   Previous view / close Repo View\nI      Interactive rebase / manage paused rebase\nS      Stage selected               U     Unstage selected\nC      Commit staged files          B     Branch / rebase / revert\nY      Fetch / push / pull          M     More actions and activity\nO      Editor                      R     Refresh local status\nPgUp / PgDn / mouse wheel in preview  Scroll diff\nEsc    Clear search and filter      Q     Quit\n\n" +
+        "Diff legend: the first line names the old (−) and new (+) sides. Two gutters show old and new line numbers; removed lines have a red background, added lines green.\n\n" +
         "T toggles untracked files (also available under F and by clicking Untracked in the toolbar). This preference is saved between launches and applies across groups and Repo View. Staged new files remain visible.\n\n" +
-        "G adds selected untracked files, or a file path / pattern, to the chosen worktree's root .gitignore. The preview lists the rules and destination. Existing contents are preserved; review and commit the .gitignore change normally.\n\n" +
-        "Click a row to preview; click its checkbox to select. Project and worktree checkboxes select visible children. Hidden selections are counted in the footer and disclosed before an action.\n\n" +
+        "G opens a destination checklist for selected untracked files or a pattern. Choose branches/worktrees, including outside this group. Inactive branches ask for a new worktree directory. The review lists rules and destinations before writing. Existing contents are preserved; review and commit the .gitignore change normally.\n\n" +
+        "Click a row for details; Enter / D or Open diff loads its diff on demand. Click its checkbox to select. Project and worktree checkboxes select visible children. Hidden selections are counted in the footer and disclosed before an action.\n\n" +
         "Branch, Sync and Commit open an explicit worktree checklist, including clean worktrees. A commit includes ALL staged files in each chosen worktree.\n\n" +
         "Each target gets its own result. Multi-repository operations are not atomic. Retry never repeats successful targets, and refuses to act if the checkout changed since the original preview.\n\n" +
         "Stage/unstage individual blocks via More. Discard unstaged restores tracked files from the index; Delete untracked is a separate action. Neither runs git clean.\n\n" +
         "W creates, edits, renames, duplicates and deletes groups. Mix whole repos, fixed worktree paths and local branch refs. Branch entries follow their checkout; inactive branches still offer history. P shows the entire repo regardless of group membership.\n\n" +
-        "History: Enter opens the commit patch, N/P page, B chooses another branch, M selects a merge parent. I includes the highlighted commit and its descendants in an interactive rebase, opening Git's real todo editor. A clean worktree and local branch are required. Use I again to continue, edit the remaining todo, amend an edit stop or abort.\n\n" +
+        "History: Enter / D opens the commit patch on demand, N/P page, B chooses another branch, M selects a merge parent. I includes the highlighted commit and its descendants in an interactive rebase, opening Git's real todo editor. A clean worktree and local branch are required. Use I again to continue, edit the remaining todo, amend an edit stop or abort.\n\n" +
         "Settings and saved groups are local to this machine. Local status refreshes automatically. Remote state only refreshes after an explicit Fetch/Pull. No background network polling.");
 }

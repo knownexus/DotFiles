@@ -46,6 +46,8 @@ static partial class Tests
             var styled = new Canvas(20, 3); Styled.Draw(styled, new Rect(0, 0, 20, 3), [new("+ a", Ink.Added), new("plain", Ink.Text)], 0);
             Equal(Ink.Added, styled.InkAt(19, 0), "Added background spans the row");
             Equal(3, Styled.FromText("a\r\nb\nc").Count, "Text lines");
+            Equal(3, Styled.Fit(Styled.FromText("abcdefghijklmnopqrstuvwxyz"), 10).Count, "Prose wraps");
+            Equal("klmnopqrst", Styled.Fit([new("abcdefghijklmnopqrstuvwxyz", Ink.Text)], 10).Single().Text[10..20], "Diff-like lines stay intact");
         });
         Test("diff view numbers old and new lines and states each side", () => {
             string diff = "diff --git a/src/A.cs b/src/A.cs\r\nindex 1..2 100644\r\n--- a/src/A.cs\r\n+++ b/src/A.cs\r\n@@ -10,3 +10,4 @@ class A\r\n keep\r\n-old line\r\n+new line\r\n+added\r\n tail\r\n\\ No newline at end of file\r\n";
@@ -89,7 +91,14 @@ static partial class Tests
             Check(new Dialogs(new ScriptedSurface(20, 6, new Input(ConsoleKey.Escape))).Text("Tiny", "A long prompt that will not fit anywhere") is null, "Tiny text prompt");
             var review = new ScriptedSurface(100, 30, new Input(ConsoleKey.Enter));
             Check(new Dialogs(review).Review("Diff", "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n"), "Review accepts");
-            Check(review.Frames[0].Contains("+ y") && review.Frames[0].Contains("− x"), "Review renders diff sides");
+            Check(review.Frames[0].Contains("− old: before   + new: after") && review.Frames[0].Contains("+ y") && review.Frames[0].Contains("− x"), "Review renders diff sides");
+            var mixed = new ScriptedSurface(80, 24, new Input(ConsoleKey.Enter));
+            Check(new Dialogs(mixed).Review("Mixed", "Preview this very long sentence before the patch so it wraps inside the popup instead of being clipped away from view.\n\ndiff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n"), "Mixed review accepts");
+            Check(mixed.Frames[0].Contains("− old: before   + new: after"), "Mixed patch has side legend");
+            Check(mixed.Frames[0].Contains("instead of being clipped"), "Long prose wraps");
+            var longLine = new ScriptedSurface(42, 14, new Input(ConsoleKey.RightArrow), new Input(ConsoleKey.RightArrow), new Input(ConsoleKey.RightArrow), new Input(ConsoleKey.Enter));
+            Check(!new Dialogs(longLine).Review("Long diff", "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+012345678901234567890123456789TAIL\n", confirm: false), "Long diff closes");
+            Check(longLine.Frames.Any(f => f.Contains("TAIL")), "Horizontal scroll reveals long diff text");
             var reviewOutside = new ScriptedSurface(80, 24, new Input(X: 0, Y: 0, Button: MouseButton.Left));
             Check(!new Dialogs(reviewOutside).Review("Diff", "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n"), "Click outside closes Review");
         });
@@ -97,6 +106,9 @@ static partial class Tests
             var view = new WorkspaceView(Demo.Settings(), new()); view.Update(Demo.Snapshot());
             var hits = new HitMap(); var layout = Layout.For(120, 32, 0.5);
             string text = Screen.Render(view, layout, hits, Styled.FromText("preview"), 0, "", false).Plain();
+            Check(text.Contains("[All projects") && text.Contains(" Secure QR") && text.Contains(" Maintenance") && text.Contains(" + "), "Group tabs render: " + text);
+            Equal("tab", hits.At(3, layout.Tabs.Y)?.Kind, "All projects tab hit");
+            Equal("new", Enumerable.Range(0, layout.Tabs.Width).Select(x => hits.At(x, layout.Tabs.Y)).First(h => h?.Id == "new")?.Id, "New group tab hit");
             Check(text.Contains(" M  src/EntryService.cs"), "Unstaged status letter"); Check(text.Contains("M   Controllers/QrCode.cs"), "Staged status letter");
             Check(!text.Contains("Modified"), "Word labels removed");
             int fileRow = view.Rows.FindIndex(r => r.Change?.Path == "src/EntryService.cs"); int y = layout.List.Y + fileRow;
@@ -107,11 +119,34 @@ static partial class Tests
             Equal("UU", Screen.StatusCode(new("x", null, "UU", ChangeArea.Conflict)), "Conflict code");
             Equal("R ", Screen.StatusCode(new("x", "y", "R.", ChangeArea.Staged)), "Staged rename");
             Equal(" D", Screen.StatusCode(new("x", null, ".D", ChangeArea.Unstaged)), "Unstaged delete");
+            view.Navigate("AccessControl"); hits.Clear();
+            string repoText = Screen.Render(view, layout, hits, Styled.FromText("preview"), 0, "", false).Plain();
+            Check(repoText.Contains("⌂ AccessControl") && repoText.Contains("×"), "Repo View tab renders");
+            Equal("repo-close", Enumerable.Range(0, layout.Tabs.Width).Select(x => hits.At(x, layout.Tabs.Y)).First(h => h?.Id == "repo-close")?.Id, "Repo close hit");
+        });
+        Test("group tab overflow exposes scroll controls and keeps the active tab visible", () => {
+            var settings = Demo.Settings();
+            settings.Groups.Clear();
+            for (int i = 1; i <= 14; i++) settings.Groups.Add(new("Group " + i.ToString("00"), ["AccessControl"], []));
+            var state = new ViewState();
+            var view = new WorkspaceView(settings, state); view.Update(Demo.Snapshot());
+            var layout = Layout.For(80, 24, 0.5); var hits = new HitMap();
+            string first = Screen.Render(view, layout, hits, Styled.FromText("preview"), 0, "", false).Plain();
+            Check(first.Contains("[All projects") && first.Contains("›") && !first.Contains("Group 14"), "Initial overflow: " + first);
+            var right = Enumerable.Range(0, layout.Tabs.Width).Select(x => hits.At(x, layout.Tabs.Y)).First(h => h?.Id == "tab-right");
+            Equal("tab-right", right?.Id, "Right scroll hit");
+            state.TabOffset = right!.Index; hits.Clear();
+            string middle = Screen.Render(view, layout, hits, Styled.FromText("preview"), 0, "", false).Plain();
+            Check(middle.Contains("‹") && middle.Contains("Group 02"), "Scrolled tabs: " + middle);
+            Equal("tab-left", Enumerable.Range(0, layout.Tabs.Width).Select(x => hits.At(x, layout.Tabs.Y)).First(h => h?.Id == "tab-left")?.Id, "Left scroll hit");
+            state.Group = "Group 14"; state.TabOffset = 0; hits.Clear();
+            string active = Screen.Render(view, layout, hits, Styled.FromText("preview"), 0, "", false).Plain();
+            Check(active.Contains("[Group 14") && state.TabOffset > 0, "Active tab forced visible: " + active);
         });
         Test("footer keys follow the focused row", () => {
             var view = new WorkspaceView(Demo.Settings(), new()); view.Update(Demo.Snapshot());
             string Keys() => string.Join(",", Footer.For(view, null).Select(k => k.Key));
-            view.Focus = view.Rows.FindIndex(r => r.Kind == "file"); Check(Keys().StartsWith(" ,s,u,c,o,\r"), "File keys: " + Keys());
+            view.Focus = view.Rows.FindIndex(r => r.Kind == "file"); Check(Keys().StartsWith(" ,d,s,u,c,o"), "File keys: " + Keys());
             view.Focus = view.Rows.FindIndex(r => r.Kind == "worktree"); Check(Keys().Contains("h") && !Keys().Contains(",s,"), "Worktree keys: " + Keys());
             view.WorktreeMode = true; view.Rebuild(); view.Focus = view.Rows.FindIndex(r => r.Kind == "worktree"); Check(Keys().Contains("i"), "Worktree mode rebase");
             view.Navigate("AccessControl"); view.Focus = view.Rows.FindIndex(r => r.Kind == "branch"); Equal("\r,b,p,?,q", Keys(), "Branch row keys");

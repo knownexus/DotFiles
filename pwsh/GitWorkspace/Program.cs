@@ -40,9 +40,7 @@ public static class Program
                 int root = arguments.IndexOf("--root");
                 if (root >= 0) {
                     if (root + 1 >= arguments.Count) throw new ArgumentException("--root needs a directory.");
-                    settings = new();
-                    foreach (var directory in Directory.EnumerateDirectories(Path.GetFullPath(arguments[root + 1])))
-                        try { Git.ResolveRepository(directory); settings.Projects.Add(new(Path.GetFileName(directory), directory)); } catch (InvalidOperationException) { }
+                    settings = Discovery.SettingsForRoot(arguments[root + 1], settings);
                 }
                 var snapshot = Git.Scan(settings);
                 if (arguments.Contains("--json")) Console.WriteLine(JsonSerializer.Serialize(snapshot, Config.Json));
