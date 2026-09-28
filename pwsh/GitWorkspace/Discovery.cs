@@ -1,70 +1,75 @@
 namespace GitWorkspace;
 
-public sealed record DiscoveredRepository(string Path, string Name, string CommonDir, string? RegisteredName)
-{
-    public bool Registered => RegisteredName is not null;
-}
+public sealed record DiscoveredRepo(string Name, string Path, string CommonDir, string? RegisteredAs);
 
 public static class Discovery
 {
     static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     static StringComparison PathComparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-    public static List<string> Roots(Settings settings) => settings.Roots is { Count: > 0 }
-        ? settings.Roots.Select(Path.GetFullPath).Distinct(PathComparer).ToList()
-        : DefaultRoots();
+    // Unset means "use the default"; an explicitly empty list means "no roots".
+    public static List<string> Roots(Settings settings) => settings.Roots is null
+        ? (Directory.Exists("C:/repos") ? ["C:/repos"] : [])
+        : settings.Roots.Select(Path.GetFullPath).Distinct(PathComparer).ToList();
 
-    public static List<string> DefaultRoots()
+    // Only folders that carry their own repository markers count; otherwise every
+    // subfolder of a checkout would resolve to that checkout's repository.
+    public static bool IsRepositoryRoot(string directory) =>
+        Directory.Exists(Path.Combine(directory, ".git")) || File.Exists(Path.Combine(directory, ".git")) ||
+        Directory.Exists(Path.Combine(directory, ".git-main")) || Directory.Exists(Path.Combine(directory, ".bare")) ||
+        File.Exists(Path.Combine(directory, "HEAD")) && Directory.Exists(Path.Combine(directory, "objects"));
+
+    public static List<DiscoveredRepo> Scan(Settings settings, IEnumerable<string> roots)
     {
-        const string windowsRepos = "C:/repos";
-        return Directory.Exists(windowsRepos) ? [Path.GetFullPath(windowsRepos)] : [];
+        var registered = new Dictionary<string, string>(PathComparer);
+        foreach (var p in settings.Projects) { try { registered.TryAdd(Git.ResolveRepository(p.Path), p.Name); } catch (InvalidOperationException) { } }
+        var seen = new HashSet<string>(PathComparer);
+        List<DiscoveredRepo> found = [];
+        foreach (var root in roots) found.AddRange(ScanRoot(root, registered, seen));
+        return found;
     }
 
-    public static List<DiscoveredRepository> Scan(Settings settings) =>
-        Roots(settings).SelectMany(root => ScanRoot(root, settings.Projects)).ToList();
-
-    public static List<DiscoveredRepository> ScanRoot(string root, IReadOnlyList<Project>? registered = null)
+    // Missing, unreadable or non-directory roots are skipped silently: the caller may be
+    // scanning several configured folders and one being gone should not fail the others.
+    static List<DiscoveredRepo> ScanRoot(string root, Dictionary<string, string> registered, HashSet<string> seen)
     {
-        root = Path.GetFullPath(root);
-        if (!Directory.Exists(root)) throw new DirectoryNotFoundException(root);
-        var registrations = RegisteredCommons(registered ?? []);
-        var seen = new HashSet<string>(PathComparer);
-        List<DiscoveredRepository> repositories = [];
-        foreach (var directory in Directory.EnumerateDirectories(root).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+        List<string> directories;
+        try
         {
-            try
-            {
-                var common = Git.ResolveRepository(directory);
-                if (!seen.Add(common)) continue;
-                registrations.TryGetValue(common, out var registeredName);
-                repositories.Add(new(Path.GetFullPath(directory), Path.GetFileName(directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)), common, registeredName));
-            }
-            catch (InvalidOperationException) { }
+            var full = Path.GetFullPath(root);
+            if (!Directory.Exists(full)) return [];
+            directories = Directory.EnumerateDirectories(full).Order(StringComparer.OrdinalIgnoreCase).ToList();
         }
-        return repositories;
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or System.Security.SecurityException) { return []; }
+        List<DiscoveredRepo> found = [];
+        foreach (var directory in directories.Where(IsRepositoryRoot))
+        {
+            string common;
+            try { common = Git.ResolveRepository(directory); }
+            catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException) { continue; }
+            if (!seen.Add(common)) continue;
+            found.Add(new(Path.GetFileName(directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+                Path.GetFullPath(directory).Replace('\\', '/'), common, registered.GetValueOrDefault(common)));
+        }
+        return found;
     }
 
     public static Settings SettingsForRoot(string root, Settings known)
     {
-        var projects = ScanRoot(root, known.Projects)
-            .Select(r => new Project(r.RegisteredName ?? r.Name, r.Path))
-            .ToList();
-        return new() { Projects = projects, RefreshSeconds = known.RefreshSeconds, Editor = known.Editor, EditorArguments = [.. known.EditorArguments] };
-    }
-
-    static Dictionary<string, string> RegisteredCommons(IReadOnlyList<Project> projects)
-    {
-        var registered = new Dictionary<string, string>(PathComparer);
-        foreach (var project in projects)
+        var full = Path.GetFullPath(root);
+        if (!Directory.Exists(full)) throw new DirectoryNotFoundException(full);
+        var found = Scan(new() { Projects = known.Projects }, [full]);
+        // Registered names are kept as-is (they are already unique); an unregistered
+        // folder whose name collides with one, case-insensitively, gets a numeric suffix.
+        var used = new HashSet<string>(found.Where(r => r.RegisteredAs is not null).Select(r => r.RegisteredAs!), StringComparer.OrdinalIgnoreCase);
+        List<Project> projects = [];
+        foreach (var r in found)
         {
-            try
-            {
-                var common = Git.ResolveRepository(project.Path);
-                registered.TryAdd(common, project.Name);
-            }
-            catch (InvalidOperationException) { }
+            string name = r.RegisteredAs ?? r.Name;
+            if (r.RegisteredAs is null) { var suffix = 2; while (!used.Add(name)) name = $"{r.Name} {suffix++}"; }
+            projects.Add(new Project(name, r.Path));
         }
-        return registered;
+        return new() { Projects = projects, RefreshSeconds = known.RefreshSeconds, Editor = known.Editor, EditorArguments = [.. known.EditorArguments] };
     }
 
     public static bool SameRepository(string leftCommon, string rightCommon) =>

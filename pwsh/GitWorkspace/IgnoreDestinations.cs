@@ -9,8 +9,7 @@ public sealed record IgnoreDestination(string Project, Worktree? Tree = null, Br
 
 public static class IgnoreDestinations
 {
-    public static bool SameRepository(string a, string b) => string.Equals(Path.GetFullPath(a).TrimEnd('/', '\\'), Path.GetFullPath(b).TrimEnd('/', '\\'),
-        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    public static bool SameRepository(string a, string b) => Discovery.SameRepository(a, b);
 
     // Use the complete snapshot, including worktrees outside the current group.
     public static List<IgnoreDestination> Available(Snapshot snapshot, string? common = null)

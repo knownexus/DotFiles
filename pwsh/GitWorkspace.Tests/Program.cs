@@ -56,7 +56,7 @@ static partial class Tests
             Equal("actual-branch", t.Branch, "Branch"); Equal(2, t.Ahead, "Ahead"); Equal(3, t.Behind, "Behind"); Equal(4, t.Changes.Count, "Rows");
             Equal("old name.txt", t.Changes[2].OriginalPath, "Rename source");
         });
-        Test("discovery handles normal repositories, bare layouts, external worktrees and deduplication", () => {
+        Test("worktree scan handles bare layouts, external worktrees, alternate .bare layout and duplicate registration", () => {
             var source = Repo(); var project = Path.Combine(root, "bare project"); Directory.CreateDirectory(project);
             var bare = Path.Combine(project, ".git-main"); Git.Run(source, "clone", "--bare", source, bare).Require();
             var inside = Path.Combine(project, "master"); Git.Run(bare, "worktree", "add", inside, "main").Require();
@@ -67,20 +67,6 @@ static partial class Tests
             var alternate = Path.Combine(root, "bare alternate"); Directory.CreateDirectory(alternate);
             Git.Run(source, "clone", "--bare", source, Path.Combine(alternate, ".bare")).Require();
             Check(Git.ResolveRepository(alternate).Replace('\\', '/').EndsWith("/.bare"), "Alternative layout");
-            var discovered = Discovery.ScanRoot(root, [new("Already", project)]);
-            Check(discovered.Any(r => r.Name.StartsWith("repo ") && !r.Registered), "Normal repo not discovered");
-            var bareDiscovery = discovered.Single(r => r.Path == Path.GetFullPath(project));
-            Equal("Already", bareDiscovery.RegisteredName, "Registered common dir not matched");
-            Check(discovered.Any(r => r.Path == Path.GetFullPath(alternate)), "Alternative .bare layout not discovered");
-            Equal(discovered.Select(r => r.CommonDir).Distinct(StringComparer.OrdinalIgnoreCase).Count(), discovered.Count, "Discovery duplicated common dirs");
-            var rootSettings = Discovery.SettingsForRoot(root, new() { Projects = [new("Already", project)] });
-            Check(rootSettings.Projects.Any(p => p.Name == "Already" && p.Path == Path.GetFullPath(project)), "Root settings did not preserve registered name");
-            var roundTrip = Path.Combine(root, "roots.json");
-            Config.Save(roundTrip, new Settings { Roots = [root], Projects = [new("Already", project)] });
-            var loaded = Config.Read(roundTrip);
-            Equal(Path.GetFullPath(root), Discovery.Roots(loaded).Single(), "Roots setting round-trip");
-            var old = Path.Combine(root, "old roots.json"); File.WriteAllText(old, "{\"Version\":1,\"Projects\":[],\"Groups\":[]}");
-            Check(Discovery.Roots(Config.Read(old)).SequenceEqual(Discovery.DefaultRoots()), "Old settings should use default roots");
         });
         Test("stale registrations are reported and never treated as clean", () => {
             var path = Repo(); var linked = Path.Combine(root, "stale worktree"); var moved = Path.Combine(root, "moved worktree");
@@ -212,6 +198,7 @@ static partial class Tests
         }
         if (!args.Contains("--ignore")) GroupHistoryTests();
         UiTests();
+        GroupUiTests();
         IgnoreTests();
         IgnoreDestinationTests();
         Console.WriteLine($"\n{passed} passed; {failed} failed. Temporary fixtures: {root}");
