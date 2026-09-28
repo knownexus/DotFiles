@@ -2,6 +2,8 @@ namespace GitWorkspace;
 
 public sealed record CommitFilter(string Search = "", bool UnpushedOnly = false, string? Base = null);
 public sealed record GraphRow(string Graph, CommitInfo? Commit, List<string> Refs, bool Unpushed);
+public sealed record CommitFile(string Status, string Path, string? OldPath, int Added, int Removed);
+public sealed record CommitDetail(string Header, List<CommitFile> Files);
 
 public static partial class CommitGraph
 {
@@ -55,5 +57,37 @@ public static partial class CommitGraph
             rows.Add(new(line[..at], commit, refs, unpushed.Contains(f[0])));
         }
         return rows;
+    }
+    public static string Base(string directory, CommitInfo commit, int parent)
+    {
+        if (commit.Parents.Count == 0) return Git.RunInput(directory, ["hash-object", "-t", "tree", "--stdin"], "").Require().Output.Trim();
+        if (parent < 0 || parent >= commit.Parents.Count) throw new ArgumentOutOfRangeException(nameof(parent));
+        return commit.Parents[parent];
+    }
+    public static List<CommitFile> Files(string directory, CommitInfo commit, int parent = 0)
+    {
+        string from = Base(directory, commit, parent);
+        var status = Git.Run(directory, "diff", "--no-ext-diff", "--no-color", "--find-renames", "-z", "--name-status", from, commit.Hash, "--").Require().Output.Split('\0');
+        var counts = Git.Run(directory, "diff", "--no-ext-diff", "--no-color", "--find-renames", "-z", "--numstat", from, commit.Hash, "--").Require().Output.Split('\0');
+        List<CommitFile> files = [];
+        for (int s = 0, n = 0; s < status.Length && status[s].Length > 0; s++)
+        {
+            string code = status[s]; bool renamed = code[0] is 'R' or 'C';
+            string? old = renamed ? status[++s] : null; string path = status[++s];
+            var numbers = counts[n].Split('\t'); n += numbers.Length == 3 && numbers[2].Length == 0 ? 3 : 1;
+            int Number(string v) => int.TryParse(v, out var value) ? value : -1;
+            files.Add(new(code[..1], path, old, Number(numbers[0]), numbers.Length > 1 ? Number(numbers[1]) : -1));
+        }
+        return files;
+    }
+    public static CommitDetail Detail(string directory, CommitInfo commit, int parent = 0) =>
+        new(Git.Run(directory, "show", "--no-patch", "--format=fuller", "--decorate=short", commit.Hash, "--").Require().Output.TrimEnd(), Files(directory, commit, parent));
+    public static string FileDiff(string directory, CommitInfo commit, int parent, CommitFile file)
+    {
+        List<string> args = ["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames", Base(directory, commit, parent), commit.Hash, "--"];
+        if (file.OldPath is not null) args.Add(file.OldPath);
+        args.Add(file.Path);
+        var output = Git.RunInput(directory, args).Require().Output;
+        return output.Length == 0 ? "No textual diff (mode change or binary file)." : output;
     }
 }

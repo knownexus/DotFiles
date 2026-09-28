@@ -66,8 +66,8 @@ static partial class Tests
             Git.Run(repo, "switch", "main").Require(); Git.Run(repo, "merge", "--no-ff", "side", "-m", "Merge side").Require();
             string before = Git.Fingerprint(Tree(repo)); string tip = History.Resolve(repo, "main");
             var commits = History.Read(repo, tip); Equal(4, commits.Count, "History count"); Equal(2, commits[0].Parents.Count, "Merge parents");
-            Check(History.Detail(repo, commits[0], 0).Contains("Side.txt"), "First parent diff"); Check(History.Detail(repo, commits[0], 1).Contains("Main.txt"), "Second parent diff");
-            Check(History.Detail(repo, commits.Last()).Contains("+line 1"), "Root diff");
+            Check(CommitGraph.Files(repo, commits[0], 0).Any(f => f.Path == "Side.txt"), "First parent diff"); Check(CommitGraph.Files(repo, commits[0], 1).Any(f => f.Path == "Main.txt"), "Second parent diff");
+            Check(CommitGraph.FileDiff(repo, commits.Last(), 0, CommitGraph.Files(repo, commits.Last()).Single()).Contains("+line 1"), "Root diff");
             Equal("Side", History.Read(repo, "side")[0].Subject, "Inactive history");
             Equal(commits[2].Hash, History.Read(repo, tip, 2, 1).Single().Hash, "Paging");
             Equal(before, Git.Fingerprint(Tree(repo)), "History changed checkout");

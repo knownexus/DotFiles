@@ -40,5 +40,19 @@ static partial class Tests
             Equal(1, CommitGraph.Read(repo, tip, new(Base: "origin/main"), null).Count(r => r.Commit is not null), "Since base");
             Equal(2, CommitGraph.Read(repo, tip, new(UnpushedOnly: true), null).Count(r => r.Commit is not null), "No upstream shows everything");
         });
+        Test("commit files list renames, root additions and each merge parent", () => {
+            var repo = MergeRepo(); string tip = History.Resolve(repo, "HEAD");
+            var commits = CommitGraph.Read(repo, tip, new(), null).Where(r => r.Commit is not null).Select(r => r.Commit!).ToList();
+            Equal("Side.txt", CommitGraph.Files(repo, commits[0], 0).Single().Path, "First parent adds Side");
+            Equal("Main.txt", CommitGraph.Files(repo, commits[0], 1).Single().Path, "Second parent adds Main");
+            var root = CommitGraph.Files(repo, commits[^1]); Equal("A", root.Single().Status, "Root adds"); Equal(40, root.Single().Added, "Root line count");
+            Git.Run(repo, "mv", "file.txt", "renamed file.txt").Require(); Git.Run(repo, "commit", "-m", "Rename").Require();
+            var rename = CommitGraph.Read(repo, History.Resolve(repo, "HEAD"), new(), null).First(r => r.Commit is not null).Commit!;
+            var file = CommitGraph.Files(repo, rename).Single(); Equal("R", file.Status, "Rename status"); Equal("file.txt", file.OldPath, "Old path"); Equal("renamed file.txt", file.Path, "New path");
+            var parsed = DiffView.Parse(CommitGraph.FileDiff(repo, rename, 0, file));
+            Equal("file.txt → renamed file.txt", parsed.First(l => l.Kind == DiffKind.Header).Text, "Rename diff header");
+            var rootDiff = DiffView.Parse(CommitGraph.FileDiff(repo, commits[^1], 0, root.Single())); Equal(40, rootDiff.Count(l => l.Kind == DiffKind.Added), "Root diff all added");
+            var detail = CommitGraph.Detail(repo, commits[0]); Check(detail.Header.Contains("Merge side") && detail.Header.Contains("Workspace Test"), "Header");
+        });
     }
 }
