@@ -39,21 +39,37 @@ public sealed class WorkspaceView(Settings settings, ViewState state)
         return Snapshot.Branches.Where(b => RepoMode ? b.Project == State.Repo : group is not null && group.Branches.Any(s => s.Project == b.Project && s.Ref == b.Ref))
             .Where(b => !Snapshot.Worktrees.Any(t => t.Project == b.Project && t.ActiveBranchRef == b.Ref));
     }
+    // Perf (checkpoint review): each group's count scans every worktree's changes, and the idle
+    // poll redraws every 30ms, so this was recomputed for every group on every frame. Only the
+    // per-group counts (the part that scans the whole snapshot) are cached, keyed on the inputs
+    // that can change them; the tab list itself (cheap - Active flags and the Repo View entry)
+    // is always rebuilt so it never goes stale between snapshots.
+    (DateTime TakenAt, bool ShowUntracked, string GroupsKey)? tabCountsKey;
+    Dictionary<string, int>? tabCounts;
     public List<GroupTab> Tabs()
     {
-        List<GroupTab> tabs = [new(0, "All projects", !RepoMode && State.Group == "All projects", Count(null, null), "group:0")];
+        string groupsKey = string.Join(';', Settings.Groups.Select(g => g.Name + "|" + string.Join(',', g.Projects) + "|" + string.Join(',', g.Worktrees) + "|" + string.Join(',', g.Branches.Select(b => b.Project + ":" + b.Ref))));
+        if (tabCountsKey is not { } key || key.TakenAt != Snapshot.TakenAt || key.ShowUntracked != State.ShowUntracked || key.GroupsKey != groupsKey)
+        {
+            var counts = new Dictionary<string, int> { ["group:0"] = Count(null, null) };
+            for (int i = 0; i < Settings.Groups.Count; i++) counts["group:" + (i + 1)] = Count(Settings.Groups[i], null);
+            tabCounts = counts; tabCountsKey = (Snapshot.TakenAt, State.ShowUntracked, groupsKey);
+        }
+        List<GroupTab> tabs = [new(0, "All projects", !RepoMode && State.Group == "All projects", tabCounts!["group:0"], "group:0")];
         for (int i = 0; i < Settings.Groups.Count; i++)
         {
             var group = Settings.Groups[i];
-            tabs.Add(new(i + 1, group.Name, !RepoMode && State.Group == group.Name, Count(group, null), "group:" + (i + 1)));
+            tabs.Add(new(i + 1, group.Name, !RepoMode && State.Group == group.Name, tabCounts!["group:" + (i + 1)], "group:" + (i + 1)));
         }
         if (RepoMode && State.Repo is not null)
             tabs.Add(new(tabs.Count, "⌂ " + State.Repo, true, Count(null, State.Repo), "repo:" + State.Repo));
         return tabs;
     }
+    // The count honours Show-untracked like every other view of these changes (Required
+    // behaviour #1) - this was missing, so untracked files counted even while hidden.
     int Count(WorkspaceGroup? group, string? repo) => Snapshot.Worktrees
         .Where(t => repo is not null ? t.Project == repo : group is null || group.Includes(t))
-        .SelectMany(t => t.Changes.Select(c => t.FileId(c)))
+        .SelectMany(t => t.Changes.Where(c => State.ShowUntracked || c.Area != ChangeArea.Untracked).Select(c => t.FileId(c)))
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .Count();
     public void Navigate(string? repo, string? group = null)
@@ -229,6 +245,11 @@ public static class Screen
         Footer.Render(c, layout.Footer, hits, Footer.For(view, null));
         return c;
     }
+    // Tab scrolling (checkpoint review): rendering only clamps and draws whatever offset
+    // navigation already chose - it never nudges it back toward the active tab. That correction
+    // belongs to EnsureTabVisible below, called once by navigation when the active tab actually
+    // changes; if rendering did it here on every frame, a manual ‹ scroll would be fought back on
+    // the very next redraw and drawing would have a persisted side effect on ViewState.
     static void GroupTabs(Canvas c, Rect bar, HitMap hits, WorkspaceView view)
     {
         var tabs = view.Tabs();
@@ -238,10 +259,6 @@ public static class Screen
         hits.Add(plusX, bar.Y, 3, new Hit("tab", -1, "new"));
 
         int offset = Math.Clamp(view.State.TabOffset, 0, Math.Max(0, tabs.Count - 1));
-        int active = Math.Max(0, tabs.FindIndex(t => t.Active));
-        while (active >= offset + VisibleTabCount(tabs, offset, 2 + (offset > 0 ? 2 : 0), plusX - 2) && offset < active) offset++;
-        view.State.TabOffset = offset;
-
         int x = 2;
         if (offset > 0)
         {
@@ -285,6 +302,19 @@ public static class Screen
             x += text.Length + 1; count++;
         }
         return Math.Max(1, count);
+    }
+    // Called by navigation (App.Run's frame loop) exactly once whenever the active tab changes -
+    // never by rendering. Uses the same layout math as GroupTabs so the computed offset always
+    // agrees with what will actually be drawn.
+    public static int EnsureTabVisible(IReadOnlyList<GroupTab> tabs, int width, int offset)
+    {
+        if (tabs.Count == 0) return 0;
+        offset = Math.Clamp(offset, 0, tabs.Count - 1);
+        int active = 0;
+        for (int i = 0; i < tabs.Count; i++) if (tabs[i].Active) { active = i; break; }
+        int plusX = Math.Max(2, width - 5);
+        while (active >= offset + VisibleTabCount(tabs, offset, 2 + (offset > 0 ? 2 : 0), plusX - 2) && offset < active) offset++;
+        return offset;
     }
     static void ViewBar(Canvas c, Rect bar, HitMap hits, WorkspaceView view)
     {

@@ -199,6 +199,7 @@ static partial class Tests
         if (!args.Contains("--ignore")) GroupHistoryTests();
         UiTests();
         GroupUiTests();
+        TabTests();
         IgnoreTests();
         IgnoreDestinationTests();
         Console.WriteLine($"\n{passed} passed; {failed} failed. Temporary fixtures: {root}");

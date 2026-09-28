@@ -52,14 +52,18 @@ public sealed partial class App
         if (edit) { EditGroupTab(hit.Index); return; }
         SelectTab(hit.Index);
     }
-    void SelectTab(int index)
+    // internal (Task 13' test seam): pinned directly by TabTests via App.TestView, since the
+    // tab strip has no other public surface. Only nudges the offset when the tab is hidden to
+    // the left of the current scroll window - it must never jump straight to the tab's own
+    // index, or "All projects" would land behind ‹ on every single-digit click.
+    internal void SelectTab(int index)
     {
         if (index < 0) return;
         var tabs = view.Tabs();
         var tab = tabs.FirstOrDefault(t => t.Index == index) ?? tabs.ElementAtOrDefault(index);
         if (tab is null) return;
         if (tab.Id.StartsWith("repo:", StringComparison.Ordinal)) return;
-        view.State.TabOffset = Math.Clamp(tab.Index, 0, Math.Max(0, tabs.Count - 1));
+        if (tab.Index < view.State.TabOffset) view.State.TabOffset = tab.Index;
         if (tab.Index == 0) view.Navigate(null, "All projects");
         else if (tab.Index - 1 < settings.Groups.Count) view.Navigate(null, settings.Groups[tab.Index - 1].Name);
         previewKey = "";
@@ -70,7 +74,8 @@ public sealed partial class App
         var index = view.State.Group == "All projects" ? 0 : settings.Groups.FindIndex(g => g.Name == view.State.Group) + 1;
         EditGroupTab(index);
     }
-    void EditGroupTab(int index)
+    // internal (Task 13' test seam): see SelectTab above.
+    internal void EditGroupTab(int index)
     {
         if (index <= 0) { notice = "All projects has no saved membership to edit."; return; }
         if (index - 1 >= settings.Groups.Count) return;
@@ -80,7 +85,10 @@ public sealed partial class App
         if (pick == 0) EditGroup(group);
         if (pick == 1) CopyGroup(group, false);
         if (pick == 2) CopyGroup(group, true);
-        if (pick == 3 && dialog.Review("Delete group", "Delete the saved membership of " + group.Name + "? Repository files, branches and worktrees stay in place.", "Delete group"))
+        // Critical (checkpoint review): --demo runs against the real config path, so a delete
+        // here must be guarded like every other write action, or it silently overwrites the
+        // user's git-workspaces.json with the demo data minus the deleted group.
+        if (pick == 3 && CanWrite() && dialog.Review("Delete group", "Delete the saved membership of " + group.Name + "? Repository files, branches and worktrees stay in place.", "Delete group"))
         {
             settings.Groups.Remove(group); Config.Save(configPath, settings); view.Navigate(null, "All projects"); previewKey = "";
         }

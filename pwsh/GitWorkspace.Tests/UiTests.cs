@@ -160,7 +160,13 @@ static partial class Tests
             string middle = Screen.Render(view, layout, hits, Styled.FromText("preview"), 0, "", false).Plain();
             Check(middle.Contains("‹") && middle.Contains("Group 02"), "Scrolled tabs: " + middle);
             Equal("tab-left", Enumerable.Range(0, layout.Tabs.Width).Select(x => hits.At(x, layout.Tabs.Y)).First(h => h?.Id == "tab-left")?.Id, "Left scroll hit");
+            // Task 13': keeping the active tab visible is navigation's job (Screen.EnsureTabVisible),
+            // called once when the active tab changes - not a side effect of Render, which would
+            // otherwise fight back a manual ‹/› scroll on the very next frame.
             state.Group = "Group 14"; state.TabOffset = 0; hits.Clear();
+            Screen.Render(view, layout, hits, Styled.FromText("preview"), 0, "", false);
+            Equal(0, state.TabOffset, "Plain render never mutates TabOffset, even with the active tab off-screen");
+            state.TabOffset = Screen.EnsureTabVisible(view.Tabs(), layout.Tabs.Width, state.TabOffset); hits.Clear();
             string active = Screen.Render(view, layout, hits, Styled.FromText("preview"), 0, "", false).Plain();
             Check(active.Contains("[Group 14") && state.TabOffset > 0, "Active tab forced visible: " + active);
         });

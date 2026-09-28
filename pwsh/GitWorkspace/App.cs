@@ -1,4 +1,10 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+
+// Task 13': the tab strip's private navigation (SelectTab, EditGroupTab) and dialog wiring
+// have no public API, so the pinning tests reach them through this internal seam rather than
+// driving a real console. See task-13a-report.md for the rationale.
+[assembly: InternalsVisibleTo("GitWorkspace.Tests")]
 
 namespace GitWorkspace;
 
@@ -17,6 +23,11 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
     bool quit;
     Task<Snapshot>? scan;
     DateTime nextScan;
+    string activeTabId = "";
+    // Test-only seam (Task 13'): lets TabTests exercise the private tab-menu/write-guard
+    // logic without a real console. Never used by Program.cs.
+    internal WorkspaceView TestView => view;
+    internal void TestAttachSurface(ISurface surface) => dialog = new Dialogs(surface);
 
     public int Run()
     {
@@ -32,6 +43,10 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
                 if (!demo && scan is null && DateTime.Now >= nextScan) { scan = Task.Run(() => Git.Scan(settings)); nextScan = DateTime.Now.AddSeconds(Math.Max(2, settings.RefreshSeconds)); }
                 UpdatePreview();
                 var layout = Layout.For(terminal.Width, terminal.Height, view.State.SplitRatio);
+                // Keep the active tab reachable only when it actually changed - never on every
+                // frame, or a manual ‹/› scroll would be fought back on the very next redraw.
+                string tabId = view.Tabs().FirstOrDefault(t => t.Active)?.Id ?? "";
+                if (tabId != activeTabId) { view.State.TabOffset = Screen.EnsureTabVisible(view.Tabs(), layout.Tabs.Width, view.State.TabOffset); activeTabId = tabId; }
                 terminal.Draw(Screen.Render(view, layout, hits, previewLines, previewScroll, notice, scan is not null));
                 var key = terminal.Poll(30);
                 if (key is null) continue;
