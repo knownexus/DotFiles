@@ -213,7 +213,7 @@ public static class Screen
             DiffView.LooksLikeDiff(preview) ? DiffView.Render(DiffView.Parse(preview), DiffSides.Generic) : Styled.FromText(preview), previewScroll, notice, refreshing);
 
     public static Canvas Render(WorkspaceView view, Layout layout, HitMap hits, IReadOnlyList<StyledLine> preview, int previewScroll, string notice, bool refreshing,
-        Action<Canvas, Layout, HitMap>? body = null)
+        Action<Canvas, Layout, HitMap>? body = null, CommitsModel? commits = null)
     {
         int width = layout.Footer.Width, height = layout.Footer.Y + 2;
         var c = new Canvas(width, height); hits.Clear();
@@ -242,7 +242,7 @@ public static class Screen
         c.Line(layout.Context.Y - 1);
         string selection = view.WorktreeMode ? $"{view.Targets.Count} worktrees selected" : $"{view.Selected.Count} changes selected" + (view.HiddenSelections > 0 ? $" · {view.HiddenSelections} hidden" : "");
         c.Text(2, layout.Context.Y, selection + "  · " + notice, Ink.Muted, width - 4);
-        Footer.Render(c, layout.Footer, hits, Footer.For(view, null));
+        Footer.Render(c, layout.Footer, hits, Footer.For(view, commits));
         return c;
     }
     // Tab scrolling (checkpoint review): rendering only clamps and draws whatever offset
@@ -323,6 +323,8 @@ public static class Screen
             bool active = (int)view.Mode == i; string label = active ? "[" + names[i] + "]" : " " + names[i] + " ";
             c.Text(x, bar.Y, label, active ? Ink.Heading : Ink.Muted); hits.Add(x, bar.Y, label.Length, new Hit("view", i)); x += label.Length + 2;
         }
+        // The untracked and filter toggles belong to Changes and Worktrees; Commits uses this space for its subject.
+        if (view.Mode == ViewMode.Commits) return;
         string untracked = "T untracked: " + (view.State.ShowUntracked ? "on" : "off");
         string filter = "F " + view.Filter + (view.Search.Length > 0 ? "  / " + view.Search : "");
         int right = bar.Width - 2 - filter.Length;

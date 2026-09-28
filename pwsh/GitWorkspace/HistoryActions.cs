@@ -24,25 +24,19 @@ public sealed partial class App
     void BrowseHistory(HistoryTarget? target = null)
     {
         target ??= view.Current?.Tree is { } tree ? Target(tree) : view.Current?.Branch is { } branch ? Target(branch) : PickHistory(view.Current?.Project);
-        while (target is not null)
-        {
-            var tip = demo ? "d3a721f904ed" : History.Resolve(target.Directory, target.Revision);
-            var choice = dialog.Commits(target.Label, tip,
-                skip => demo ? (skip == 0 ? Demo.Commits() : []) : History.Read(target.Directory, tip, skip),
-                (commit, parent) => demo ? $"commit {commit.Hash}\nAuthor: {commit.Author}\nDate: {commit.Date}\n\n{commit.Subject}\n\n" + Demo.Diff : History.Detail(target.Directory, commit, parent));
-            if (choice is null) return;
-            if (choice.Action == "branch") { target = PickHistory(target.Project); continue; }
-            if (choice.Action == "rebase") {
-                if (!CanWrite()) continue;
-                Refresh();
-                var checkout = view.Snapshot.Worktrees.FirstOrDefault(t => t.Id == target.WorktreeId && t.Usable);
-                if (checkout is null) { dialog.Message("Interactive rebase", "This branch needs an available worktree before rebasing. Use B → Checkout branch, or create a worktree for it, then open its history."); continue; }
-                if (Git.Head(checkout) != tip || checkout.ActiveBranchRef != target.BranchRef) { dialog.Message("History changed", "This worktree moved after history opened. History has been refreshed; select the intended commit again."); target = Target(checkout); continue; }
-                RebaseInteractive(checkout, choice.Commit);
-                target = Target(view.Snapshot.Worktrees.FirstOrDefault(t => t.Id == checkout.Id) ?? checkout);
-            }
-            else { Refresh(); if (target.WorktreeId is not null && view.Snapshot.Worktrees.FirstOrDefault(t => t.Id == target.WorktreeId) is { } current) target = Target(current); }
-        }
+        if (target is not null) OpenCommits(target);
+    }
+    // The list was read at a pinned tip; rebasing is only offered while the worktree still sits
+    // on that exact commit and branch, so the highlighted commit is the one Git will rewrite.
+    void RebaseFromCommit(CommitsModel m, CommitInfo commit)
+    {
+        if (!CanWrite()) return;
+        Refresh();
+        var checkout = view.Snapshot.Worktrees.FirstOrDefault(t => t.Id == m.Target.WorktreeId && t.Usable);
+        if (checkout is null) { dialog.Message("Interactive rebase", "This branch needs an available worktree before rebasing. Use B → Checkout branch, or create a worktree for it, then open its commits."); return; }
+        if (Git.Head(checkout) != m.Tip || checkout.ActiveBranchRef != m.Target.BranchRef) { dialog.Message("History changed", "This worktree moved after its commits were listed. The list has been refreshed; select the intended commit again."); OpenCommits(Target(checkout)); return; }
+        RebaseInteractive(checkout, commit);
+        OpenCommits(Target(view.Snapshot.Worktrees.FirstOrDefault(t => t.Id == checkout.Id) ?? checkout));
     }
     Worktree? FocusedCheckout(string title)
     {

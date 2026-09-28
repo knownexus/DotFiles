@@ -15,13 +15,19 @@ public static class Program
                 configPath = Path.GetFullPath(arguments[configAt + 1]); arguments.RemoveRange(configAt, 2);
             }
             if (arguments.Contains("--help") || arguments.Contains("help")) {
-                Console.WriteLine("gws                        Open the workspace checklist\ngws status [--json]         Read-only overview of every registered worktree\ngws status --root <path>    Discover projects immediately under a directory\ngws add <name> <path>       Register an existing repository\ngws --demo                 Interactive sample (no repository changes)\ngws --snapshot [width height]  Print the sample layout\ngws --config <path>         Override the local configuration file\n\nConfig: " + configPath); return 0;
+                Console.WriteLine("gws                        Open the workspace checklist\ngws status [--json]         Read-only overview of every registered worktree\ngws status --root <path>    Discover projects immediately under a directory\ngws add <name> <path>       Register an existing repository\ngws --demo                 Interactive sample (no repository changes)\ngws --snapshot [width height] [commits]  Print the sample layout\ngws --config <path>         Override the local configuration file\n\nConfig: " + configPath); return 0;
             }
             if (arguments.Contains("--snapshot")) {
                 int index = arguments.IndexOf("--snapshot");
-                int w = arguments.Count > index + 1 ? int.Parse(arguments[index + 1]) : 140;
-                int h = arguments.Count > index + 2 ? int.Parse(arguments[index + 2]) : 32;
+                int w = int.TryParse(arguments.ElementAtOrDefault(index + 1), out var pw) ? pw : 140;
+                int h = int.TryParse(arguments.ElementAtOrDefault(index + 2), out var ph) ? ph : 32;
                 var view = new WorkspaceView(Demo.Settings(), new()); view.Update(Demo.Snapshot()); view.Focus = 2;
+                if (arguments.Contains("commits")) {
+                    view.Mode = ViewMode.Commits; var model = Demo.CommitsModel(); model.Load(); model.DetailTask()!.Wait();
+                    var layout = Layout.For(Math.Clamp(w, 1, 300), Math.Clamp(h, 1, 100), 0.5);
+                    Console.OutputEncoding = System.Text.Encoding.UTF8;
+                    Console.Write(Screen.Render(view, layout, new HitMap(), [], 0, "Commits", false, (c, l, hits) => CommitsRender.Body(c, l, hits, model, 0), model).Plain()); return 0;
+                }
                 foreach (var row in view.Rows.Where(r => r.Change is not null).Take(2)) view.Selected.Add(row.Id);
                 Console.OutputEncoding = System.Text.Encoding.UTF8;
                 Console.Write(Screen.Render(view, Math.Clamp(w, 1, 300), Math.Clamp(h, 1, 100), Demo.Diff, 0, "Local status updated just now", false).Plain()); return 0;
@@ -67,6 +73,14 @@ public static class Demo
     public static Settings Settings() => new() { Projects = [new("AccessControl", "C:/repos/AccessControl"), new("Joiners", "C:/repos/Joiners"), new("mobileApp", "C:/repos/mobileApp")],
         Groups = [new("Secure QR", ["Joiners"], []) { Branches = [new("AccessControl", "refs/heads/feature/secure-qr"), new("mobileApp", "refs/heads/feature/qr-data")] }, new("Maintenance", ["mobileApp"], [])] };
     public static List<CommitInfo> Commits() => [new("d3a721f904ed", "d3a721f", "Phillip", "2026-09-24", "Validate signed QR entry requests", ["a928430d8fc2"]), new("a928430d8fc2", "a928430", "Phillip", "2026-09-23", "Add QR response contract", ["8175ff13ae44"]), new("8175ff13ae44", "8175ff1", "Phillip", "2026-09-22", "Initial service", [])];
+    public static List<GraphRow> Graph() => [
+        new("* ", Commits()[0], ["HEAD → feature/secure-qr"], true),
+        new("* ", Commits()[1], ["origin/feature/secure-qr"], false),
+        new("* ", Commits()[2], ["tag: v0.1"], false)];
+    public static CommitsModel CommitsModel() => new(new("AccessControl", "C:/repos/AccessControl/master", "HEAD", "AccessControl / master → feature/secure-qr"),
+        (tip, filter, skip, count) => skip == 0 ? Graph() : [],
+        (commit, parent) => new($"commit {commit.Hash}\nAuthor:     {commit.Author}\nAuthorDate: {commit.Date}\n\n    {commit.Subject}", [new("M", "src/EntryService.cs", null, 4, 1)]),
+        (commit, parent, file) => Diff, revision => "d3a721f904ed");
     public static Snapshot Snapshot()
     {
         var a = new Worktree { Project = "AccessControl", ProjectRoot = "C:/repos/AccessControl", Path = "C:/repos/AccessControl/master", CommonDir = "C:/repos/AccessControl/.git-main", Branch = "feature/secure-qr", Ahead = 2, Upstream = "origin/feature/secure-qr", Changes = [new("src/EntryService.cs", null, ".M", ChangeArea.Unstaged), new("appsettings.json", null, ".M", ChangeArea.Unstaged)] };

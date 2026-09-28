@@ -88,5 +88,21 @@ static partial class Tests
             var repo = Repo(); var searched = CommitsModel.ForGit(new("Test", repo, "HEAD", "Test")); searched.Load(); searched.SetFilter(new("zzz-not-found"));
             Equal("No commits match this search or filter.", searched.Empty, "Empty search");
         });
+        Test("commits view renders graph rows, refs and the drill-down preview at every width", () => {
+            var view = new WorkspaceView(Demo.Settings(), new()); view.Update(Demo.Snapshot()); view.Mode = ViewMode.Commits;
+            var model = Demo.CommitsModel(); model.Load(); model.DetailTask()!.Wait();
+            foreach (var width in new[] { 80, 120, 160 }) {
+                var hits = new HitMap(); var layout = Layout.For(width, 32, 0.5);
+                string text = Screen.Render(view, layout, hits, [], 0, "", false, (c, l, h) => CommitsRender.Body(c, l, h, model, 0)).Plain();
+                Check(text.Contains("[Commits]") && text.Contains("d3a721f") && text.Contains("Validate signed QR"), $"List at {width}");
+                if (width >= 100) Check(text.Contains("Author") || text.Contains("Phillip"), $"Preview at {width}");
+                Equal("row", hits.At(4, layout.List.Y)?.Kind, $"Row hit at {width}");
+            }
+            Check(CommitsRender.Preview(model).Any(l => l.Text.Contains("src/EntryService.cs")), "Files in preview");
+            model.Enter(); model.Enter(); model.DiffTask()!.Wait(); var diff = CommitsRender.Preview(model);
+            Check(diff.Any(l => l.Text.StartsWith("− old: parent a928430")), "Commit legend names the parent");
+            var keys = string.Join(",", Footer.For(view, model).Select(k => k.Key)); Check(keys.Contains("d") && !keys.Contains("s"), "Diff-level keys: " + keys);
+            model.Back(); model.Back(); keys = string.Join(",", Footer.For(view, model).Select(k => k.Key)); Check(keys.StartsWith("\r,/,f,b,i,v,y,z,Y,M"), "Commit keys: " + keys);
+        });
     }
 }

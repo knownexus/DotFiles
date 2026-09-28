@@ -29,7 +29,7 @@ public sealed partial class App
         var options = groups.Concat(new[] { "+ Create project group…", "Edit group membership…", "Rename group…", "Duplicate group…", "Delete group…", "Repo View…" }).ToList();
         var pick = dialog.Choose("Project groups", options, Math.Max(0, groups.IndexOf(view.State.Group)));
         if (pick is null) return;
-        if (pick < groups.Count) { view.Navigate(null, groups[pick.Value]); previewKey = ""; return; }
+        if (pick < groups.Count) { view.Navigate(null, groups[pick.Value]); previewKey = ""; AfterScopeChange(); return; }
         switch (pick - groups.Count)
         {
             case 0: EditGroup(); break;
@@ -48,7 +48,7 @@ public sealed partial class App
             return;
         }
         if (hit.Id == "new") { EditGroup(); return; }
-        if (hit.Id == "repo-close") { view.Back(); previewKey = ""; return; }
+        if (hit.Id == "repo-close") { view.Back(); previewKey = ""; AfterScopeChange(); return; }
         if (edit) { EditGroupTab(hit.Index); return; }
         SelectTab(hit.Index);
     }
@@ -66,7 +66,7 @@ public sealed partial class App
         if (tab.Index < view.State.TabOffset) view.State.TabOffset = tab.Index;
         if (tab.Index == 0) view.Navigate(null, "All projects");
         else if (tab.Index - 1 < settings.Groups.Count) view.Navigate(null, settings.Groups[tab.Index - 1].Name);
-        previewKey = "";
+        previewKey = ""; AfterScopeChange();
     }
     void EditCurrentTab()
     {
@@ -90,7 +90,7 @@ public sealed partial class App
         // user's git-workspaces.json with the demo data minus the deleted group.
         if (pick == 3 && CanWrite() && dialog.Review("Delete group", "Delete the saved membership of " + group.Name + "? Repository files, branches and worktrees stay in place.", "Delete group"))
         {
-            settings.Groups.Remove(group); Config.Save(configPath, settings); view.Navigate(null, "All projects"); previewKey = "";
+            settings.Groups.Remove(group); Config.Save(configPath, settings); view.Navigate(null, "All projects"); previewKey = ""; AfterScopeChange();
         }
     }
     WorkspaceGroup? PickGroup(string title)
@@ -118,7 +118,7 @@ public sealed partial class App
             catch (InvalidOperationException e) { return new EditorError(e.Message); }
         }, Search);
         if (name is null || saved is null) return;
-        Config.Save(configPath, settings); Refresh(); view.Navigate(null, saved.Name); previewKey = "";
+        Config.Save(configPath, settings); Refresh(); view.Navigate(null, saved.Name); previewKey = ""; AfterScopeChange();
         notice = "Saved group " + saved.Name + " · E edits it · 1–9 switch groups";
     }
     void CopyGroup(WorkspaceGroup original, bool duplicate)
@@ -128,14 +128,14 @@ public sealed partial class App
         if (name is null) return;
         var updated = original with { Name = name, Projects = [.. original.Projects], Worktrees = [.. original.Worktrees], Branches = [.. original.Branches] };
         if (duplicate) settings.Groups.Add(updated); else settings.Groups[settings.Groups.IndexOf(original)] = updated;
-        Config.Save(configPath, settings); view.Navigate(null, name); previewKey = "";
+        Config.Save(configPath, settings); view.Navigate(null, name); previewKey = ""; AfterScopeChange();
     }
     void RemoveGroup()
     {
         if (!CanWrite()) return;
         var group = PickGroup("Delete project group");
         if (group is null || !dialog.Review("Delete group", "Delete the saved membership of " + group.Name + "? Repository files, branches and worktrees stay in place.", "Delete group")) return;
-        settings.Groups.Remove(group); Config.Save(configPath, settings); view.Navigate(null, "All projects"); previewKey = "";
+        settings.Groups.Remove(group); Config.Save(configPath, settings); view.Navigate(null, "All projects"); previewKey = ""; AfterScopeChange();
     }
     void RepoView(bool choose = false)
     {
@@ -145,7 +145,7 @@ public sealed partial class App
             var pick = dialog.Choose("Repo View · choose repository", projects, Math.Max(0, projects.IndexOf(view.State.Repo ?? view.Current?.Project ?? "")));
             if (pick is null) return; project = projects[pick.Value];
         }
-        view.Navigate(project); previewKey = "";
+        view.Navigate(project); previewKey = ""; AfterScopeChange();
         notice = "All worktrees and local branches · H history · [ ] next repo · Backspace return";
     }
 }

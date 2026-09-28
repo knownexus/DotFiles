@@ -24,6 +24,8 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
     Task<Snapshot>? scan;
     DateTime nextScan;
     string activeTabId = "";
+    // Kept when Tab leaves Commits, so returning restores the position; cleared when the group changes.
+    CommitsModel? commits;
     // Test-only seam (Task 13'): lets TabTests exercise the private tab-menu/write-guard
     // logic without a real console. Never used by Program.cs.
     internal WorkspaceView TestView => view;
@@ -47,7 +49,9 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
                 // frame, or a manual ‹/› scroll would be fought back on the very next redraw.
                 string tabId = view.Tabs().FirstOrDefault(t => t.Active)?.Id ?? "";
                 if (tabId != activeTabId) { view.State.TabOffset = Screen.EnsureTabVisible(view.Tabs(), layout.Tabs.Width, view.State.TabOffset); activeTabId = tabId; }
-                terminal.Draw(Screen.Render(view, layout, hits, previewLines, previewScroll, notice, scan is not null));
+                terminal.Draw(view.Mode == ViewMode.Commits && commits is { } model
+                    ? Screen.Render(view, layout, hits, [], 0, notice, scan is not null, (c, l, h) => CommitsRender.Body(c, l, h, model, previewScroll), model)
+                    : Screen.Render(view, layout, hits, previewLines, previewScroll, notice, scan is not null));
                 var key = terminal.Poll(30);
                 if (key is null) continue;
                 try { Handle(key); } catch (Exception e) { dialog.Message("Unable to complete action", e.Message); notice = "Action stopped; open Activity for completed operations."; }
@@ -118,6 +122,16 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (key.Mouse)
         {
             var hit = hits.At(key.X, key.Y);
+            if (view.Mode == ViewMode.Commits && commits is { } open)
+            {
+                if (key.Wheel != 0) { if (hit?.Kind == "preview") previewScroll = Math.Max(0, previewScroll + key.Wheel); else open.Move(key.Wheel); return; }
+                if (hit?.Kind == "row") {
+                    open.Focus = hit.Index; while (open.Back()) { } previewScroll = 0;
+                    if (key.DoubleClick) dialog.Review(open.Target.Label, CommitsRender.Preview(open), confirm: false);
+                    return;
+                }
+                if (hit?.Kind == "subject") { PickCommitSubject(); return; }
+            }
             if (key.Wheel != 0) {
                 if (hit?.Kind == "preview") previewScroll = Math.Max(0, previewScroll + key.Wheel);
                 else view.Focus = Math.Clamp(view.Focus + key.Wheel, 0, Math.Max(0, view.Rows.Count - 1));
@@ -137,6 +151,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         }
         if (key.Control && key.Key == ConsoleKey.C) { quit = true; return; }
         if (key.Control && key.Key == ConsoleKey.N) { EditGroup(); return; }
+        if (view.Mode == ViewMode.Commits && commits is not null && HandleCommits(key)) return;
         if (key.Character >= '1' && key.Character <= '9') { SelectTab(key.Character - '1'); return; }
         if (key.Key == ConsoleKey.UpArrow) { view.Focus = Math.Max(0, view.Focus - 1); return; }
         if (key.Key == ConsoleKey.DownArrow) { view.Focus = Math.Min(Math.Max(0, view.Rows.Count - 1), view.Focus + 1); return; }
@@ -144,9 +159,9 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (key.Key == ConsoleKey.PageDown) { previewScroll = Math.Max(0, Math.Min(preview.Split('\n').Length - 1, previewScroll + 10)); return; }
         if (key.Key == ConsoleKey.Spacebar) { view.Toggle(view.Current); return; }
         if (key.Key is ConsoleKey.LeftArrow or ConsoleKey.RightArrow) { Collapse(); return; }
-        if (key.Key == ConsoleKey.Tab) { SetMode(view.WorktreeMode ? ViewMode.Changes : ViewMode.Worktrees); return; }
+        if (key.Key == ConsoleKey.Tab) { SetMode(view.Mode switch { ViewMode.Changes => ViewMode.Worktrees, ViewMode.Worktrees => ViewMode.Commits, _ => ViewMode.Changes }); return; }
         if (key.Key == ConsoleKey.Enter) { ShowPreview(); return; }
-        if (key.Key == ConsoleKey.Backspace) { view.Back(); previewKey = ""; return; }
+        if (key.Key == ConsoleKey.Backspace) { view.Back(); previewKey = ""; AfterScopeChange(); return; }
         if (key.Key == ConsoleKey.Escape) { view.Search = ""; view.Filter = "All changes"; view.Rebuild(); return; }
         switch (char.ToLowerInvariant(key.Character))
         {
@@ -163,8 +178,8 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
             case 'p': RepoView(); break;
             case 'h': BrowseHistory(); break;
             case 'i': RebaseInteractive(); break;
-            case '[': view.Cycle(-1); previewKey = ""; break;
-            case ']': view.Cycle(1); previewKey = ""; break;
+            case '[': view.Cycle(-1); previewKey = ""; AfterScopeChange(); break;
+            case ']': view.Cycle(1); previewKey = ""; AfterScopeChange(); break;
             case 'r': Refresh(); break;
             case 's': FileAction("Stage"); break;
             case 'u': FileAction("Unstage"); break;
@@ -180,14 +195,95 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
     }
     void SetMode(ViewMode mode)
     {
-        if (mode == ViewMode.Commits) { notice = "Commits view arrives in a later update."; return; } // replaced in Task 20
-        view.Mode = mode; view.Rebuild(); previewKey = "";
+        if (mode == ViewMode.Commits && commits is null) {
+            var target = view.Current?.Tree is { } tree ? Target(tree) : view.Current?.Branch is { } branch ? Target(branch) :
+                view.InGroup().FirstOrDefault(t => t.Usable) is { } first ? Target(first) : null;
+            if (target is null) { notice = "No worktree in this view to show commits for."; return; }
+            OpenCommits(target); return;
+        }
+        view.Mode = mode; view.Rebuild(); previewKey = ""; previewScroll = 0;
+    }
+    void OpenCommits(HistoryTarget target)
+    {
+        commits = demo ? Demo.CommitsModel() : CommitsModel.ForGit(target); commits.Load();
+        view.Mode = ViewMode.Commits; previewScroll = 0;
+        notice = "Commits · Enter files · / search (@author :path) · B another branch · Tab back to changes";
+    }
+    // A new group or Repo View changes what the Commits subject may be, so it restarts at the
+    // first worktree of the new scope (or drops back to Changes when there is none).
+    void AfterScopeChange()
+    {
+        if (view.Mode != ViewMode.Commits) return;
+        commits = null; SetMode(ViewMode.Commits);
+        if (commits is null) SetMode(ViewMode.Changes);
     }
     void HandleAction(string id)
     {
         if (id == " ") Handle(new(ConsoleKey.Spacebar));
         else if (id == "\r") Handle(new(ConsoleKey.Enter));
+        else if (id == "\u001b") Handle(new(ConsoleKey.Escape));
         else Handle(new(Character: id[0]));
+    }
+    bool HandleCommits(Input key)
+    {
+        var m = commits!;
+        if (key.Key == ConsoleKey.UpArrow) { m.Move(-1); previewScroll = 0; return true; }
+        if (key.Key == ConsoleKey.DownArrow) { m.Move(1); previewScroll = 0; return true; }
+        if (key.Key == ConsoleKey.Home && m.Level == CommitLevel.Commits) { m.Focus = Math.Max(0, m.Rows.FindIndex(r => r.Commit is not null)); previewScroll = 0; return true; }
+        if (key.Key == ConsoleKey.PageUp) { previewScroll = Math.Max(0, previewScroll - 10); return true; }
+        if (key.Key == ConsoleKey.PageDown) { previewScroll = Math.Max(0, Math.Min(CommitsRender.Preview(m).Count - 1, previewScroll + 10)); return true; }
+        if (key.Key == ConsoleKey.Enter) { m.Enter(); previewScroll = 0; return true; }
+        if (key.Key is ConsoleKey.Escape or ConsoleKey.Backspace && m.Back()) { previewScroll = 0; return true; }
+        // Selection and folding act on the hidden Changes rows, so they are inert here.
+        if (key.Key is ConsoleKey.Spacebar or ConsoleKey.LeftArrow or ConsoleKey.RightArrow) return true;
+        if (key.Character is 'Y' or 'M') { if (key.Character == 'Y') SyncMenu(); else More(); return true; }
+        switch (char.ToLowerInvariant(key.Character))
+        {
+            case '/': var s = dialog.Text("Search commits", "Words match the message, @name the author, :path a file. All matching is literal and case-insensitive. Empty clears.", m.Filter.Search);
+                if (s is not null) { m.SetFilter(m.Filter with { Search = s }); previewScroll = 0; } return true;
+            case 'f': CommitFilterMenu(m); previewScroll = 0; return true;
+            case 'b' or 'h': PickCommitSubject(); return true;
+            case 'r': m.Load(); previewScroll = 0; return true;
+            case 'm': m.NextParent(); previewScroll = 0; return true;
+            case 'z': dialog.Review(m.Target.Label, CommitsRender.Preview(m), confirm: false); return true;
+            case 'y': if (m.Commit is { } c) CopyHash(c.Hash); return true;
+            case 'i': if (m.Commit is { } first) RebaseFromCommit(m, first); return true;
+            case 'v': if (m.Commit is { } revert) RevertFromCommits(m, revert); return true;
+            case 'd': if (m.Level != CommitLevel.Commits && m.Commit is { } dc && m.File is { } file && CanWrite()) {
+                    List<string> args = ["difftool", "--no-prompt", CommitGraph.Base(m.Target.Directory, dc, m.Parent), dc.Hash, "--"]; if (file.OldPath is not null) args.Add(file.OldPath); args.Add(file.Path);
+                    RunExternal(Git.StartInfo(m.Target.Directory, args, false)); }
+                return true;
+            case 's' or 'u' or 'c' or 'a' or 'x' or 't' or 'g' or 'o': notice = "Switch to Changes (Tab) to select, stage or commit files."; return true;
+        }
+        return false;
+    }
+    void CommitFilterMenu(CommitsModel m)
+    {
+        var pick = dialog.Choose("Filter commits", ["All commits", "Unpushed only" + (m.Target.Upstream is null ? " (no upstream)" : ""), "Since a base (branch, tag or commit)…"]);
+        if (pick == 0) m.SetFilter(m.Filter with { UnpushedOnly = false, Base = null });
+        if (pick == 1) m.SetFilter(m.Filter with { UnpushedOnly = true, Base = null });
+        if (pick == 2 && dialog.Text("Since base", "Show commits after this base, e.g. main or origin/main.", m.Filter.Base ?? "main") is { Length: > 0 } b) m.SetFilter(m.Filter with { UnpushedOnly = false, Base = b });
+    }
+    void PickCommitSubject()
+    {
+        var targets = view.InGroup().Where(t => t.Head != "(initial)").Select(Target).Concat(view.InactiveBranches().Select(Target)).ToList();
+        var pick = dialog.Choose("Commits · choose branch or worktree", targets.Select(t => t.Label + (t.WorktreeId is null ? " · not checked out" : "")).ToList());
+        if (pick is not null) OpenCommits(targets[pick.Value]);
+    }
+    void CopyHash(string hash)
+    {
+        try {
+            var start = new ProcessStartInfo("clip.exe") { UseShellExecute = false, RedirectStandardInput = true, CreateNoWindow = true };
+            using var process = Process.Start(start)!; process.StandardInput.Write(hash); process.StandardInput.Close(); process.WaitForExit(5000);
+            notice = "Copied " + hash;
+        } catch (Exception e) when (e is System.ComponentModel.Win32Exception or IOException or InvalidOperationException) { notice = "Clipboard unavailable · " + hash; }
+    }
+    void RevertFromCommits(CommitsModel m, CommitInfo commit)
+    {
+        if (!CanWrite()) return;
+        var tree = view.Snapshot.Worktrees.FirstOrDefault(t => t.Id == m.Target.WorktreeId && t.Usable);
+        if (tree is null) { dialog.Message("Revert commit", "Revert needs this branch checked out in a worktree. Use B → Checkout branch first."); return; }
+        Execute([Operations.Revert(tree, commit.Hash)]); m.Load();
     }
     void ToggleUntracked()
     {
@@ -472,7 +568,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         Execute([Patches.Plan(row.Tree, row.Change, patch, selected, unstage)]);
     }
     void Help() => dialog.Message("Git Workspace · help", "Checkboxes select items for an action. They do not stage files. Staged rows show exactly what is in Git's index.\n\n" +
-        "↑ ↓   Move focus                  Space / click checkbox   Select\nEnter/D  Open diff / history       ← →   Collapse section\nTab    Changes / Worktrees          A     Select all visible\n<  >  Resize the preview split\nX      Clear selections             /     Search paths and branches\nF      Filters                      W     Switch / manage project groups\n1-9    Jump group tab               Ctrl+N  New project group\nE      Edit current group tab       P     Repo View\nH      Commit history               [ / ]  Cycle group or repo\nBackspace   Previous view / close Repo View\nI      Interactive rebase / manage paused rebase\nS      Stage selected               U     Unstage selected\nC      Commit staged files          B     Branch / rebase / revert\nY      Fetch / push / pull          M     More actions and activity\nO      Editor                      R     Refresh local status\nPgUp / PgDn / mouse wheel in preview  Scroll diff\nEsc    Clear search and filter      Q     Quit\n\n" +
+        "↑ ↓   Move focus                  Space / click checkbox   Select\nEnter/D  Open diff / history       ← →   Collapse section\nTab    Changes / Worktrees / Commits  A   Select all visible\n<  >  Resize the preview split\nX      Clear selections             /     Search paths and branches\nF      Filters                      W     Switch / manage project groups\n1-9    Jump group tab               Ctrl+N  New project group\nE      Edit current group tab       P     Repo View\nH      Commits view                 [ / ]  Cycle group or repo\nBackspace   Previous view / close Repo View\nI      Interactive rebase / manage paused rebase\nS      Stage selected               U     Unstage selected\nC      Commit staged files          B     Branch / rebase / revert\nY      Fetch / push / pull          M     More actions and activity\nO      Editor                      R     Refresh local status\nPgUp / PgDn / mouse wheel in preview  Scroll diff\nEsc    Clear search and filter      Q     Quit\n\n" +
         "Diff legend: the first line names the old (−) and new (+) sides. Two gutters show old and new line numbers; removed lines have a red background, added lines green.\n\n" +
         "T toggles untracked files (also available under F and by clicking Untracked in the toolbar). This preference is saved between launches and applies across groups and Repo View. Staged new files remain visible.\n\n" +
         "G opens a destination checklist for selected untracked files or a pattern. Choose branches/worktrees, including outside this group. Inactive branches ask for a new worktree directory. The review lists rules and destinations before writing. Existing contents are preserved; review and commit the .gitignore change normally.\n\n" +
@@ -481,6 +577,6 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         "Each target gets its own result. Multi-repository operations are not atomic. Retry never repeats successful targets, and refuses to act if the checkout changed since the original preview.\n\n" +
         "Stage/unstage individual blocks via More. Discard unstaged restores tracked files from the index; Delete untracked is a separate action. Neither runs git clean.\n\n" +
         "W creates, edits, renames, duplicates and deletes groups. Mix whole repos, fixed worktree paths and local branch refs. Branch entries follow their checkout; inactive branches still offer history. P shows the entire repo regardless of group membership.\n\n" +
-        "History: Enter / D opens the commit patch on demand, N/P page, B chooses another branch, M selects a merge parent. I includes the highlighted commit and its descendants in an interactive rebase, opening Git's real todo editor. A clean worktree and local branch are required. Use I again to continue, edit the remaining todo, amend an edit stop or abort.\n\n" +
+        "Commits (Tab or H): the list shows the branch graph with ↑ on unpushed commits. Enter drills into a commit's files, then a file's diff; Esc goes back. / searches (words, @author, :path), F filters (unpushed, since a base), B chooses another branch or worktree, lowercase M selects a merge parent, D opens the difftool, V reviews a revert, Y copies the hash, Z zooms the preview. I includes the highlighted commit and its descendants in an interactive rebase, opening Git's real todo editor. A clean worktree and local branch are required. Use I again to continue, edit the remaining todo, amend an edit stop or abort.\n\n" +
         "Settings and saved groups are local to this machine. Local status refreshes automatically. Remote state only refreshes after an explicit Fetch/Pull. No background network polling.");
 }

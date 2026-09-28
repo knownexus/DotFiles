@@ -4,6 +4,15 @@ public static class Footer
 {
     public static List<(string Key, string Label)> For(WorkspaceView view, CommitsModel? commits)
     {
+        if (view.Mode == ViewMode.Commits && commits is not null)
+        {
+            List<(string, string)> k = commits.Level switch {
+                CommitLevel.Commits => [("\r", "Enter files"), ("/", "search"), ("f", "filter"), ("b", "branch"), ("i", "rebase"), ("v", "revert"), ("y", "copy hash"), ("z", "zoom"), ("Y", "Shift+Y sync"), ("M", "Shift+M more")],
+                CommitLevel.Files => [("\r", "Enter diff"), ("d", "difftool"), .. commits.Commit?.Parents.Count > 1 ? new[] { ("m", "parent") } : [], ("z", "zoom"), ("\u001b", "Esc back")],
+                _ => [("d", "difftool"), ("z", "zoom"), ("\u001b", "Esc back")]
+            };
+            k.Add(("?", "keys")); k.Add(("q", "quit")); return k;
+        }
         List<(string, string)> keys = view.Current?.Kind switch {
             "file" when !view.WorktreeMode => [(" ", "Space select"), ("d", "Diff"), ("s", "Stage"), ("u", "Unstage"), ("c", "Commit…"), ("o", "Open"), ("m", "More…")],
             "branch" => [("\r", "Enter history"), ("b", "Checkout…"), ("p", "Repo")],
@@ -16,7 +25,7 @@ public static class Footer
     }
     public static void Render(Canvas c, Rect area, HitMap hits, List<(string Key, string Label)> keys)
     {
-        static string Text(string key, string label) => key == " " || key == "\r" ? label : key.ToUpperInvariant() + " " + label;
+        static string Text(string key, string label) => key is " " or "\r" or "\u001b" || key.Length == 1 && char.IsUpper(key[0]) ? label : key.ToUpperInvariant() + " " + label;
         var pinned = keys.Where(k => k.Key is "?" or "q").ToList();
         var rest = keys.Where(k => k.Key is not ("?" or "q")).ToList();
         int pinnedWidth = pinned.Sum(k => Text(k.Key, k.Label).Length) + Math.Max(0, pinned.Count - 1) * 3;

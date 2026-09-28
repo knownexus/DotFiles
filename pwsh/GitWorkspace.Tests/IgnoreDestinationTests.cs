@@ -55,15 +55,20 @@ static partial class Tests
             Check(!create.Run().Success && !Directory.Exists(destination), "Moved inactive branch accepted");
         });
         Test("history navigation never loads a patch until explicitly requested", () => {
-            int reads = 0;
-            string Detail(CommitInfo c, int parent) { reads++; return Demo.Diff; }
-            var browse = new ScriptedSurface(140, 32, new(ConsoleKey.DownArrow), new(ConsoleKey.DownArrow), new(ConsoleKey.UpArrow), new(ConsoleKey.Escape));
-            new Dialogs(browse).Commits("Test", "d3a721f904ed", _ => Demo.Commits(), Detail);
-            Equal(0, reads, "Arrow navigation loaded diffs");
-            var open = new ScriptedSurface(140, 32, new(ConsoleKey.DownArrow), new(Character: 'd'), new(ConsoleKey.Escape), new(ConsoleKey.Escape));
-            new Dialogs(open).Commits("Test", "d3a721f904ed", _ => Demo.Commits(), Detail);
-            Equal(1, reads, "Explicit diff load count");
-            Check(open.Frames.Any(f => f.Contains("old: parent") && f.Contains("new: a928430")), "Commit sides missing");
+            int details = 0, diffs = 0;
+            var model = new CommitsModel(new("Test", "C:/demo", "HEAD", "Test"), (tip, filter, skip, count) => skip == 0 ? Demo.Graph() : [],
+                (c, p) => { Interlocked.Increment(ref details); return new CommitDetail("commit " + c.Hash, [new("M", "src/EntryService.cs", null, 4, 1)]); },
+                (c, p, f) => { Interlocked.Increment(ref diffs); return Demo.Diff; }, _ => "d3a721f904ed");
+            model.Load(); model.Move(1); model.Move(1); model.Move(-1);
+            // A narrow frame at the commit level draws only the list, so nothing reads a commit.
+            var view = new WorkspaceView(Demo.Settings(), new()); view.Update(Demo.Snapshot()); view.Mode = ViewMode.Commits;
+            Screen.Render(view, Layout.For(80, 32, 0.5), new HitMap(), [], 0, "", false, (c, l, h) => CommitsRender.Body(c, l, h, model, 0), model);
+            Equal(0, details, "Arrow navigation loaded commit details");
+            CommitsRender.Preview(model); model.DetailTask()!.Wait(); CommitsRender.Preview(model);
+            Equal(1, details, "Detail load count for the shown commit"); Equal(0, diffs, "Showing a commit loaded a file diff");
+            model.Enter(); model.Enter(); CommitsRender.Preview(model); model.DiffTask()!.Wait(); var lines = CommitsRender.Preview(model);
+            Equal(1, details, "Drill-down reloaded the detail"); Equal(1, diffs, "Explicit diff load count");
+            Check(lines.Any(l => l.Text.Contains("old: parent 8175ff1") && l.Text.Contains("new: a928430")), "Commit sides missing");
         });
         Test("ignore picker keeps project separators and accepts only checked destinations", () => {
             var a = Demo.Snapshot().Worktrees[0]; var b = Demo.Snapshot().Worktrees[1];
