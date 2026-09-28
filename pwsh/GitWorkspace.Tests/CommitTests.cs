@@ -88,6 +88,27 @@ static partial class Tests
             var repo = Repo(); var searched = CommitsModel.ForGit(new("Test", repo, "HEAD", "Test")); searched.Load(); searched.SetFilter(new("zzz-not-found"));
             Equal("No commits match this search or filter.", searched.Empty, "Empty search");
         });
+        Test("commits select after a merge parent switch resets the parent and file focus", () => {
+            var repo = MergeRepo();
+            var model = CommitsModel.ForGit(new("Test", repo, "HEAD", "Test")); model.Load();
+            model.Focus = model.Rows.FindIndex(r => r.Commit?.Subject == "Merge side"); model.NextParent(); model.Enter(); model.FileFocus = 3;
+            Equal(1, model.Parent, "Second parent chosen");
+            int single = model.Rows.FindIndex(r => r.Commit is { Parents.Count: 1 }); model.Select(single);
+            Equal(0, model.Parent, "Parent reset"); Equal(0, model.FileFocus, "File focus reset"); Equal(CommitLevel.Commits, model.Level, "Back at the commit level");
+            var detail = model.DetailTask()!; detail.Wait(); Check(detail.IsCompletedSuccessfully, "Detail after select");
+            var lines = CommitsRender.Preview(model); Check(!lines.Any(l => l.Ink == Ink.Bad), "Preview error: " + string.Join(" | ", lines.Select(l => l.Text)));
+            model.Select(0); Check(model.Commit is not null, "Home lands on a commit row");
+        });
+        Test("changing group outside commits resets the commits subject for the next visit", () => {
+            var settings = Demo.Settings(); var app = new App(settings, Path.Combine(root, "scope-" + Guid.NewGuid().ToString("N") + ".json"), demo: true);
+            app.TestView.Update(Demo.Snapshot());
+            void FocusTree(string project) => app.TestView.Focus = app.TestView.Rows.FindIndex(r => r.Kind == "worktree" && r.Project == project);
+            FocusTree("AccessControl"); app.TestSetMode(ViewMode.Commits); Equal("AccessControl", app.TestCommits?.Target.Project, "First subject");
+            app.TestSetMode(ViewMode.Changes);
+            app.SelectTab(settings.Groups.FindIndex(g => g.Name == "Maintenance") + 1); Check(app.TestCommits is null, "Group change dropped the old model");
+            FocusTree("mobileApp"); app.TestSetMode(ViewMode.Commits);
+            Equal("mobileApp", app.TestCommits?.Target.Project, "Subject follows the new group"); Equal(ViewMode.Commits, app.TestView.Mode, "In Commits");
+        });
         Test("commits view renders graph rows, refs and the drill-down preview at every width", () => {
             var view = new WorkspaceView(Demo.Settings(), new()); view.Update(Demo.Snapshot()); view.Mode = ViewMode.Commits;
             var model = Demo.CommitsModel(); model.Load(); model.DetailTask()!.Wait();

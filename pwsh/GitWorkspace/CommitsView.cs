@@ -62,6 +62,16 @@ public sealed class CommitsModel(HistoryTarget target, Func<string, CommitFilter
         }
         Focus = index; Parent = 0;
     }
+    // Jumps (click, Home) go through here so the merge parent and file focus never outlive their commit.
+    public void Select(int index)
+    {
+        if (Rows.Count == 0) return;
+        index = Math.Clamp(index, 0, Rows.Count - 1);
+        int next = Rows.FindIndex(index, r => r.Commit is not null);
+        if (next < 0) next = Rows.FindLastIndex(index, r => r.Commit is not null);
+        if (next < 0) return;
+        Focus = next; Parent = 0; FileFocus = 0; Level = CommitLevel.Commits;
+    }
     public void SetFilter(CommitFilter filter) { Filter = filter; Load(); }
     public void Enter()
     {
@@ -140,7 +150,8 @@ public static class CommitsRender
         if (detailTask is not { IsCompleted: true }) return [new("Loading…", Ink.Muted)];
         if (!detailTask.IsCompletedSuccessfully) return [new(detailTask.Exception?.GetBaseException().Message ?? "Unable to read commit.", Ink.Bad)];
         var detail = detailTask.Result;
-        string parentShort = commit.Parents.Count == 0 ? "" : commit.Parents[model.Parent][..Math.Min(7, commit.Parents[model.Parent].Length)];
+        string parentHash = commit.Parents.ElementAtOrDefault(Math.Clamp(model.Parent, 0, Math.Max(0, commit.Parents.Count - 1))) ?? "";
+        string parentShort = parentHash[..Math.Min(7, parentHash.Length)];
         if (model.Level == CommitLevel.FileDiff)
         {
             var diffTask = model.DiffTask();

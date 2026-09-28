@@ -24,12 +24,15 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
     Task<Snapshot>? scan;
     DateTime nextScan;
     string activeTabId = "";
-    // Kept when Tab leaves Commits, so returning restores the position; cleared when the group changes.
+    // Kept when Tab leaves Commits, so returning restores the position; cleared by any group or
+    // Repo View change (AfterScopeChange), so the next Commits visit starts in the new scope.
     CommitsModel? commits;
     // Test-only seam (Task 13'): lets TabTests exercise the private tab-menu/write-guard
     // logic without a real console. Never used by Program.cs.
     internal WorkspaceView TestView => view;
     internal void TestAttachSurface(ISurface surface) => dialog = new Dialogs(surface);
+    internal CommitsModel? TestCommits => commits;
+    internal void TestSetMode(ViewMode mode) => SetMode(mode);
 
     public int Run()
     {
@@ -126,7 +129,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
             {
                 if (key.Wheel != 0) { if (hit?.Kind == "preview") previewScroll = Math.Max(0, previewScroll + key.Wheel); else open.Move(key.Wheel); return; }
                 if (hit?.Kind == "row") {
-                    open.Focus = hit.Index; while (open.Back()) { } previewScroll = 0;
+                    open.Select(hit.Index); previewScroll = 0;
                     if (key.DoubleClick) dialog.Review(open.Target.Label, CommitsRender.Preview(open), confirm: false);
                     return;
                 }
@@ -205,16 +208,18 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
     }
     void OpenCommits(HistoryTarget target)
     {
-        commits = demo ? Demo.CommitsModel() : CommitsModel.ForGit(target); commits.Load();
+        commits = demo ? Demo.CommitsModel(target) : CommitsModel.ForGit(target); commits.Load();
         view.Mode = ViewMode.Commits; previewScroll = 0;
         notice = "Commits · Enter files · / search (@author :path) · B another branch · Tab back to changes";
     }
-    // A new group or Repo View changes what the Commits subject may be, so it restarts at the
-    // first worktree of the new scope (or drops back to Changes when there is none).
+    // A new group or Repo View changes what the Commits subject may be, so the model is always
+    // dropped; in Commits it restarts at once on the new scope (or drops back to Changes when
+    // there is nothing to show), elsewhere the next Tab into Commits opens it fresh.
     void AfterScopeChange()
     {
+        commits = null;
         if (view.Mode != ViewMode.Commits) return;
-        commits = null; SetMode(ViewMode.Commits);
+        SetMode(ViewMode.Commits);
         if (commits is null) SetMode(ViewMode.Changes);
     }
     void HandleAction(string id)
@@ -229,7 +234,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         var m = commits!;
         if (key.Key == ConsoleKey.UpArrow) { m.Move(-1); previewScroll = 0; return true; }
         if (key.Key == ConsoleKey.DownArrow) { m.Move(1); previewScroll = 0; return true; }
-        if (key.Key == ConsoleKey.Home && m.Level == CommitLevel.Commits) { m.Focus = Math.Max(0, m.Rows.FindIndex(r => r.Commit is not null)); previewScroll = 0; return true; }
+        if (key.Key == ConsoleKey.Home && m.Level == CommitLevel.Commits) { m.Select(0); previewScroll = 0; return true; }
         if (key.Key == ConsoleKey.PageUp) { previewScroll = Math.Max(0, previewScroll - 10); return true; }
         if (key.Key == ConsoleKey.PageDown) { previewScroll = Math.Max(0, Math.Min(CommitsRender.Preview(m).Count - 1, previewScroll + 10)); return true; }
         if (key.Key == ConsoleKey.Enter) { m.Enter(); previewScroll = 0; return true; }
@@ -283,7 +288,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (!CanWrite()) return;
         var tree = view.Snapshot.Worktrees.FirstOrDefault(t => t.Id == m.Target.WorktreeId && t.Usable);
         if (tree is null) { dialog.Message("Revert commit", "Revert needs this branch checked out in a worktree. Use B → Checkout branch first."); return; }
-        Execute([Operations.Revert(tree, commit.Hash)]); m.Load();
+        if (Execute([Operations.Revert(tree, commit.Hash)])) m.Load();
     }
     void ToggleUntracked()
     {
@@ -319,12 +324,13 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (picked is null || picked.Count == 0) return null;
         return picked.Select(i => all[i]).ToList();
     }
-    void Execute(List<Plan> plans, bool review = true)
+    // Returns false when nothing ran (no plans, or the review was cancelled).
+    bool Execute(List<Plan> plans, bool review = true)
     {
-        if (plans.Count == 0) return;
+        if (plans.Count == 0) return false;
         string title = plans[0].Action + $" · {plans.Count} target(s)";
         var content = string.Join("\n\n────────────────────────\n\n", plans.Select(p => p.Tree.Title + "\n" + p.Preview));
-        if (review && !dialog.Review(title, content)) return;
+        if (review && !dialog.Review(title, content)) return false;
         failed.Clear(); List<OperationResult> results = [];
         for (int i = 0; i < plans.Count; i++) {
             var p = plans[i];
@@ -335,6 +341,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         Refresh();
         notice = $"{results.Count(r => r.Success)} completed · {failed.Count} failed · M → Activity";
         if (review || failed.Count > 0) dialog.Message(title + " · results", string.Join("\n\n", results.Select(r => (r.Success ? "✓ " : "! ") + r.Target + "\n" + r.Detail)));
+        return true;
     }
     void SaveActivity() { if (!demo) Config.Save(configPath + ".activity.json", activity.TakeLast(200).ToList()); }
     void FileAction(string action)
@@ -502,7 +509,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (!CanWrite()) return;
         var remove = dialog.Choose("Remove registration (keep all repository files)", settings.Projects.Select(p => p.Name).ToList());
         if (remove.HasValue && dialog.Review("Remove project registration", "Remove " + settings.Projects[remove.Value].Name + " from this workspace configuration. All files and Git data stay in place.")) {
-            settings.Projects.RemoveAt(remove.Value); Config.Save(configPath, settings); view.Navigate(null, "All projects"); Refresh();
+            settings.Projects.RemoveAt(remove.Value); Config.Save(configPath, settings); view.Navigate(null, "All projects"); Refresh(); AfterScopeChange();
         }
     }
     void ShowActivity() => dialog.Message("Activity · most recent first", activity.Count == 0 ? "No actions recorded yet." :
@@ -522,7 +529,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         var name = dialog.Text("Project name", "A unique name for this project.", Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)));
         if (string.IsNullOrWhiteSpace(name)) return;
         if (settings.Projects.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("Project name already exists.");
-        settings.Projects.Add(new(name, path)); Config.Save(configPath, settings); view.Navigate(null, "All projects"); Refresh();
+        settings.Projects.Add(new(name, path)); Config.Save(configPath, settings); view.Navigate(null, "All projects"); Refresh(); AfterScopeChange();
     }
     void SearchFolders()
     {

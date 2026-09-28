@@ -77,7 +77,7 @@ public static class Demo
         new("* ", Commits()[0], ["HEAD → feature/secure-qr"], true),
         new("* ", Commits()[1], ["origin/feature/secure-qr"], false),
         new("* ", Commits()[2], ["tag: v0.1"], false)];
-    public static CommitsModel CommitsModel() => new(new("AccessControl", "C:/repos/AccessControl/master", "HEAD", "AccessControl / master → feature/secure-qr"),
+    public static CommitsModel CommitsModel(HistoryTarget? target = null) => new(target ?? new("AccessControl", "C:/repos/AccessControl/master", "HEAD", "AccessControl / master → feature/secure-qr"),
         (tip, filter, skip, count) => skip == 0 ? Graph() : [],
         (commit, parent) => new($"commit {commit.Hash}\nAuthor:     {commit.Author}\nAuthorDate: {commit.Date}\n\n    {commit.Subject}", [new("M", "src/EntryService.cs", null, 4, 1)]),
         (commit, parent, file) => Diff, revision => "d3a721f904ed");
