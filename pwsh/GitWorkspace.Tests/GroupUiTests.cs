@@ -13,12 +13,15 @@ static partial class Tests
             var source = Repo(); var layout = Path.Combine(scan, "Layout"); Directory.CreateDirectory(layout);
             Git.Run(source, "clone", "--bare", source, Path.Combine(layout, ".git-main")).Require();
             Git.Run(source, "clone", "--bare", source, Path.Combine(scan, "Bare.git")).Require();
+            var alt = Path.Combine(scan, "Alt"); Directory.CreateDirectory(alt);
+            Git.Run(source, "clone", "--bare", source, Path.Combine(alt, ".bare")).Require();
             Directory.CreateDirectory(Path.Combine(scan, "Plain folder"));
             Directory.CreateDirectory(Path.Combine(normal, "nested inside repo"));
-            var registered = InitAt(Path.Combine(scan, "Registered"));
+            var registered = Path.Combine(scan, "Registered"); Directory.CreateDirectory(registered);
+            Git.Run(source, "clone", "--bare", source, Path.Combine(registered, ".git-main")).Require();
             var settings = new Settings { Projects = [new("Already here", registered)] };
             var found = Discovery.Scan(settings, [scan, Path.Combine(root, "missing root"), normal]);
-            Equal("Bare.git,Layout,Normal,Registered", string.Join(",", found.Select(f => f.Name)), "Found repos (nested folder under a repo root is not a repo)");
+            Equal("Alt,Bare.git,Layout,Normal,Registered", string.Join(",", found.Select(f => f.Name)), "Found repos (nested folder under a repo root is not a repo)");
             Equal("Already here", found.Single(f => f.Name == "Registered").RegisteredAs, "Registered by Git directory");
             Check(found.Where(f => f.Name != "Registered").All(f => f.RegisteredAs is null), "Others unregistered");
         });
