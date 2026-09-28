@@ -93,5 +93,18 @@ static partial class Tests
             draft.BranchesShown.Add("Joiners"); Check(draft.Rows("", new HashSet<string>()).Any(m => m.Kind == "branch" && m.Project == "Joiners"), "Branches shown");
             Check(!draft.Rows("", new HashSet<string> { "Joiners" }).Any(m => m.Project == "Joiners" && m.Kind != "repo"), "Folded repo hides children");
         });
+        Test("group editor edits the name, ticks rows and merges background discovery", () => {
+            var draft = new GroupDraft(Demo.Settings(), Demo.Snapshot());
+            var discovery = Task.FromResult(new List<DiscoveredRepo> { new("Payments", "C:/nowhere/Payments", "x", null) });
+            var keys = new List<Input> { new(Key: ConsoleKey.U, Control: true) };
+            keys.AddRange("QR".Select(ch => new Input(Character: ch)));
+            keys.AddRange([new(ConsoleKey.Tab), new(ConsoleKey.Spacebar), new(ConsoleKey.End), new(ConsoleKey.Spacebar), new(ConsoleKey.Enter)]);
+            var surface = new ScriptedSurface(100, 30, [.. keys]);
+            var name = new Dialogs(surface).EditGroup(draft, "New group", discovery);
+            Equal("QR", name, "Name typed");
+            Equal(RepoState.Whole, draft.State("AccessControl"), "First repo ticked");
+            Check(draft.Checked.Contains(draft.Members.Single(m => m.Kind == "new-repo").Id), "Discovered repo ticked");
+            Check(surface.Frames.Any(f => f.Contains("★ not registered")), "Discovered marker drawn");
+        });
     }
 }

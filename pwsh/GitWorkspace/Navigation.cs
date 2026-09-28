@@ -109,12 +109,17 @@ public sealed partial class App
     void EditGroup(WorkspaceGroup? existing = null)
     {
         if (!CanWrite()) return;
-        var name = existing?.Name ?? GroupName("Create project group"); if (name is null) return;
-        var draft = dialog.EditGroup(new(settings, view.Snapshot, existing), name); if (draft is null) return;
-        var group = draft.Build(name);
-        if (existing is not null) settings.Groups[settings.Groups.IndexOf(existing)] = group; else settings.Groups.Add(group);
-        Config.Save(configPath, settings); view.Navigate(null, name); previewKey = "";
-        notice = "Saved group · whole repos, fixed worktree paths and branch refs can be mixed.";
+        var draft = new GroupDraft(settings, view.Snapshot, existing);
+        Task<List<DiscoveredRepo>> Search() => Task.Run(() => Discovery.Scan(settings, Discovery.Roots(settings)));
+        WorkspaceGroup? saved = null;
+        var name = dialog.EditGroup(draft, existing?.Name ?? "New group", Search(), candidate => {
+            try { saved = draft.Commit(settings, candidate, existing, Git.ResolveRepository); return null; }
+            catch (GroupSaveException e) { return new EditorError(e.Message, e.MemberId); }
+            catch (InvalidOperationException e) { return new EditorError(e.Message); }
+        }, Search);
+        if (name is null || saved is null) return;
+        Config.Save(configPath, settings); Refresh(); view.Navigate(null, saved.Name); previewKey = "";
+        notice = "Saved group " + saved.Name + " · E edits it · 1–9 switch groups";
     }
     void CopyGroup(WorkspaceGroup original, bool duplicate)
     {
