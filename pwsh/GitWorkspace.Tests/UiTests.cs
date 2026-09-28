@@ -35,6 +35,17 @@ static partial class Tests
             Check(MouseDecoder.Decode(1, 2, 1, 1, ref previous)?.DoubleClick == true, "Double click");
             Equal(-3, MouseDecoder.Decode(unchecked((uint)(120 << 16)), 4, 1, 1, ref previous)?.Wheel, "Wheel up");
         });
+        Test("key-repeat replay is limited to navigation and text-editing keys", () => {
+            Equal(1, Terminal.RepeatsFor(ConsoleKey.Enter, 3), "Enter never replays");
+            Equal(1, Terminal.RepeatsFor(ConsoleKey.Spacebar, 3), "Space never replays");
+            Equal(1, Terminal.RepeatsFor(ConsoleKey.Escape, 3), "Escape never replays");
+            Equal(1, Terminal.RepeatsFor(ConsoleKey.A, 3), "A letter never replays");
+            Equal(1, Terminal.RepeatsFor(ConsoleKey.Tab, 3), "Tab never replays");
+            Equal(3, Terminal.RepeatsFor(ConsoleKey.DownArrow, 3), "Down arrow replays");
+            Equal(3, Terminal.RepeatsFor(ConsoleKey.PageDown, 3), "Page down replays");
+            Equal(3, Terminal.RepeatsFor(ConsoleKey.Backspace, 3), "Backspace replays");
+            Equal(1, Terminal.RepeatsFor(ConsoleKey.UpArrow, 0), "Repeat count is never below 1");
+        });
         Test("canvas boxes clip safely, dim a copy and styled diff lines fill their row", () => {
             var c = new Canvas(30, 8); c.Text(0, 0, "BACKDROP");
             var copy = c.Clone(); copy.Dim(); Equal(Ink.Gutter, copy.InkAt(0, 0), "Dimmed copy"); Equal(Ink.Text, c.InkAt(0, 0), "Original untouched");
@@ -91,11 +102,21 @@ static partial class Tests
             Check(new Dialogs(new ScriptedSurface(20, 6, new Input(ConsoleKey.Escape))).Text("Tiny", "A long prompt that will not fit anywhere") is null, "Tiny text prompt");
             var review = new ScriptedSurface(100, 30, new Input(ConsoleKey.Enter));
             Check(new Dialogs(review).Review("Diff", "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n"), "Review accepts");
-            Check(review.Frames[0].Contains("− old: before   + new: after") && review.Frames[0].Contains("+ y") && review.Frames[0].Contains("− x"), "Review renders diff sides");
+            Check(review.Frames[0].Contains("+ y") && review.Frames[0].Contains("− x"), "Review renders diff lines");
+            Check(!review.Frames[0].Contains("− old:"), "No guessed legend on a bare diff review");
             var mixed = new ScriptedSurface(80, 24, new Input(ConsoleKey.Enter));
             Check(new Dialogs(mixed).Review("Mixed", "Preview this very long sentence before the patch so it wraps inside the popup instead of being clipped away from view.\n\ndiff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n"), "Mixed review accepts");
-            Check(mixed.Frames[0].Contains("− old: before   + new: after"), "Mixed patch has side legend");
+            Check(!mixed.Frames[0].Contains("− old:"), "Mixed patch has no guessed side legend");
+            Check(mixed.Frames[0].Contains("+ y") && mixed.Frames[0].Contains("− x"), "Mixed patch still renders +/- lines");
             Check(mixed.Frames[0].Contains("instead of being clipped"), "Long prose wraps");
+            // Finding 2: a wrong before/after label on a destructive review (e.g. Unstage blocks previews
+            // the staged patch, whose "+" lines are already in the index and about to be removed) is worse
+            // than no label, so plan/action previews never guess a legend - only bare old/new gutters.
+            var plan = new ScriptedSurface(80, 24, new Input(ConsoleKey.Enter));
+            string planText = "This will unstage the selected block.\n\ndiff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n";
+            Check(new Dialogs(plan).Review("Unstage blocks", planText), "Plan review accepts");
+            Check(!plan.Frames[0].Contains("before") && !plan.Frames[0].Contains("after") && !plan.Frames[0].Contains("− old:"), "No before/after legend on a plan review");
+            Check(plan.Frames[0].Contains("+ y") && plan.Frames[0].Contains("− x"), "Plan review still renders +/- lines");
             var longLine = new ScriptedSurface(42, 14, new Input(ConsoleKey.RightArrow), new Input(ConsoleKey.RightArrow), new Input(ConsoleKey.RightArrow), new Input(ConsoleKey.Enter));
             Check(!new Dialogs(longLine).Review("Long diff", "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+012345678901234567890123456789TAIL\n", confirm: false), "Long diff closes");
             Check(longLine.Frames.Any(f => f.Contains("TAIL")), "Horizontal scroll reveals long diff text");

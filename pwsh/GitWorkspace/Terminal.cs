@@ -44,15 +44,27 @@ public sealed class Terminal : ISurface, IDisposable
     {
         if (active) return;
         if (native) { SetConsoleMode(input, 0x0080 | 0x0010 | 0x0008); SetConsoleMode(output, outputMode | 0x0004); }
-        Console.Write("\u001b[?1049h\u001b[?25l\u001b[2J\u001b[H"); active = true; previousLines = null;
+        Console.Write("\u001b[?1049h\u001b[?25l\u001b[2J\u001b[H"); active = true; previousLines = null; remainingRepeats = 0;
     }
     public void Suspend()
     {
         if (!active) return;
         Console.Write("\u001b[0m\u001b[?25h\u001b[?1049l");
         if (native) { SetConsoleMode(input, inputMode); SetConsoleMode(output, outputMode); }
-        active = false;
+        active = false; remainingRepeats = 0;
     }
+    // conhost coalesces queued identical key-downs into one record with a raised RepeatCount -
+    // exactly what happens while the app is blocked in synchronous Git work. Replaying that count
+    // as separate keystrokes is safe for navigation/text-editing keys, but replaying it for Enter,
+    // Escape, Tab, printable characters or Ctrl combinations can silently confirm a review or
+    // prompt the user never actually saw. Everything else is reported once regardless of RepeatCount.
+    public static int RepeatsFor(ConsoleKey key, ushort repeatCount) => key switch
+    {
+        ConsoleKey.UpArrow or ConsoleKey.DownArrow or ConsoleKey.LeftArrow or ConsoleKey.RightArrow or
+        ConsoleKey.PageUp or ConsoleKey.PageDown or ConsoleKey.Home or ConsoleKey.End or
+        ConsoleKey.Backspace or ConsoleKey.Delete => Math.Max(1, (int)repeatCount),
+        _ => 1
+    };
     public Input? Poll(int milliseconds = 50)
     {
         if (remainingRepeats > 0) { remainingRepeats--; return repeatedKey; }
@@ -65,8 +77,9 @@ public sealed class Terminal : ISurface, IDisposable
                 {
                     if (!ReadConsoleInputW(input, out var record, 1, out _)) return null;
                     if (record.Type == 1 && record.Down != 0) {
-                        repeatedKey = new((ConsoleKey)record.Key, record.Character, (record.Control & 0x000C) != 0, (record.Control & 0x0010) != 0);
-                        remainingRepeats = Math.Max(0, record.RepeatCount - 1);
+                        var key = (ConsoleKey)record.Key;
+                        repeatedKey = new(key, record.Character, (record.Control & 0x000C) != 0, (record.Control & 0x0010) != 0);
+                        remainingRepeats = Math.Max(0, RepeatsFor(key, record.RepeatCount) - 1);
                         return repeatedKey;
                     }
                     if (record.Type == 2)

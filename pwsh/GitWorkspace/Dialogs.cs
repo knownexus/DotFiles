@@ -123,12 +123,15 @@ public sealed partial class Dialogs(ISurface terminal)
     }
     public bool Review(string title, string text, string accept = "Execute", bool confirm = true) =>
         Review(title, DiffView.LooksLikeDiff(text) ? Mixed(text) : Styled.FromText(text), accept, confirm);
-    // Plan previews mix prose with patches; only the patch part gets diff styling.
+    // Plan previews mix prose with patches; only the patch part gets diff styling. There is no
+    // reliable way to know here which side of the patch is "before" and which is "after" (e.g. an
+    // unstage plan previews the staged patch, whose "+" lines are already in the index and about
+    // to be removed) so this never guesses a legend: sides: null renders bare old/new gutters.
     static List<StyledLine> Mixed(string text)
     {
         int start = text.StartsWith("diff --", StringComparison.Ordinal) ? 0 : text.IndexOf("\ndiff --", StringComparison.Ordinal) + 1;
         if (start <= 0 && !text.StartsWith("diff --", StringComparison.Ordinal)) start = Math.Max(0, text.IndexOf("\n@@ ", StringComparison.Ordinal) + 1);
-        return [.. Styled.FromText(text[..start].TrimEnd('\n')).Where(_ => start > 0), .. DiffView.Render(DiffView.Parse(text[start..]), DiffSides.Generic)];
+        return [.. Styled.FromText(text[..start].TrimEnd('\n')).Where(_ => start > 0), .. DiffView.Render(DiffView.Parse(text[start..]), null)];
     }
     public bool Review(string title, IReadOnlyList<StyledLine> lines, string accept = "Execute", bool confirm = true)
     {
