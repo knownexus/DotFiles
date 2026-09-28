@@ -54,5 +54,26 @@ static partial class Tests
             var rootDiff = DiffView.Parse(CommitGraph.FileDiff(repo, commits[^1], 0, root.Single())); Equal(40, rootDiff.Count(l => l.Kind == DiffKind.Added), "Root diff all added");
             var detail = CommitGraph.Detail(repo, commits[0]); Check(detail.Header.Contains("Merge side") && detail.Header.Contains("Workspace Test"), "Header");
         });
+        Test("commits model skips connector rows, loads more and drills into files", () => {
+            var repo = MergeRepo(); for (int i = 0; i < 5; i++) CommitFile(repo, "Extra" + i);
+            var model = new CommitsModel(new("Test", repo, "HEAD", "Test"), (tip, filter, skip, count) => CommitGraph.Read(repo, tip, filter, null, skip, count),
+                (c, p) => CommitGraph.Detail(repo, c, p), (c, p, f) => CommitGraph.FileDiff(repo, c, p, f), rev => History.Resolve(repo, rev), batch: 4);
+            model.Load(); Check(model.Commit is not null, "Focus on a commit");
+            for (int i = 0; i < 12; i++) { model.Move(1); model.EnsureLoaded(3); Check(model.Current?.Commit is not null, "Never focus a connector"); }
+            Check(model.Rows.Count(r => r.Commit is not null) > 4, "Loaded a second batch"); Equal(9, model.Rows.Count(r => r.Commit is not null), "All commits once");
+            CommitFile(repo, "Later"); model.Move(1); model.EnsureLoaded(3); Equal(9, model.Rows.Count(r => r.Commit is not null), "Pinned tip");
+            model.Focus = model.Rows.FindIndex(r => r.Commit?.Subject == "Merge side"); model.Enter(); Equal(CommitLevel.Files, model.Level, "Files level");
+            Equal("Side.txt", model.DetailTask()!.GetAwaiter().GetResult().Files.Single().Path, "Detail loaded");
+            model.NextParent(); Equal(1, model.Parent, "Second parent"); Equal("Main.txt", model.DetailTask()!.GetAwaiter().GetResult().Files.Single().Path, "Parent switched");
+            model.Enter(); Equal(CommitLevel.FileDiff, model.Level, "Diff level"); Check(model.DiffTask()!.GetAwaiter().GetResult().Contains("+Main"), "File diff");
+            Check(model.Back() && model.Level == CommitLevel.Files, "Back to files"); Check(model.Back() && model.Level == CommitLevel.Commits, "Back to commits"); Check(!model.Back(), "Already at top");
+        });
+        Test("commits model reports an unborn branch and an empty search without throwing", () => {
+            var empty = Repo(initial: false); var model = CommitsModel.ForGit(new("Empty", empty, "HEAD", "Empty")); model.Load();
+            Equal("No commits yet on this branch.", model.Empty, "Unborn"); Check(model.Commit is null && model.Rows.Count == 0, "No rows");
+            model.Move(1); model.Enter(); Equal(CommitLevel.Commits, model.Level, "Enter does nothing");
+            var repo = Repo(); var searched = CommitsModel.ForGit(new("Test", repo, "HEAD", "Test")); searched.Load(); searched.SetFilter(new("zzz-not-found"));
+            Equal("No commits match this search or filter.", searched.Empty, "Empty search");
+        });
     }
 }

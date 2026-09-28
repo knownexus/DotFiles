@@ -2,7 +2,7 @@ namespace GitWorkspace;
 
 public static class Footer
 {
-    public static List<(string Key, string Label)> For(WorkspaceView view, object? commits)
+    public static List<(string Key, string Label)> For(WorkspaceView view, CommitsModel? commits)
     {
         List<(string, string)> keys = view.Current?.Kind switch {
             "file" when !view.WorktreeMode => [(" ", "Space select"), ("d", "Diff"), ("s", "Stage"), ("u", "Unstage"), ("c", "Commit…"), ("o", "Open"), ("m", "More…")],

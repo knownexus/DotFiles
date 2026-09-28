@@ -2,14 +2,14 @@ using System.Diagnostics;
 
 namespace GitWorkspace;
 
-public sealed record HistoryTarget(string Project, string Directory, string Revision, string Label, string? WorktreeId = null, string? BranchRef = null);
+public sealed record HistoryTarget(string Project, string Directory, string Revision, string Label, string? WorktreeId = null, string? BranchRef = null, string? Upstream = null);
 
 public sealed partial class App
 {
     HistoryTarget Target(Worktree tree) => new(tree.Project, tree.Usable ? tree.Path : tree.CommonDir,
-        tree.Usable ? "HEAD" : tree.Head, tree.Title, tree.Id, tree.ActiveBranchRef);
+        tree.Usable ? "HEAD" : tree.Head, tree.Title, tree.Id, tree.ActiveBranchRef, tree.UpstreamGone ? null : tree.Upstream);
     HistoryTarget Target(BranchInfo branch) => new(branch.Project, branch.CommonDir, branch.Ref, branch.Project + " / " + branch.Name,
-        view.Snapshot.Worktrees.FirstOrDefault(t => t.Project == branch.Project && t.ActiveBranchRef == branch.Ref)?.Id, branch.Ref);
+        view.Snapshot.Worktrees.FirstOrDefault(t => t.Project == branch.Project && t.ActiveBranchRef == branch.Ref)?.Id, branch.Ref, branch.Upstream);
     HistoryTarget? PickHistory(string? project)
     {
         if (project is null) {
