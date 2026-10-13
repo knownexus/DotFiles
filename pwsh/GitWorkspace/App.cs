@@ -531,17 +531,23 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         if (settings.Projects.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("Project name already exists.");
         settings.Projects.Add(new(name, path)); Config.Save(configPath, settings); view.Navigate(null, "All projects"); Refresh(); AfterScopeChange();
     }
+    public static List<string> ParseRoots(string text)
+    {
+        var roots = text.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (roots.FirstOrDefault(r => !Path.IsPathFullyQualified(r)) is { } bad) throw new InvalidOperationException("Use absolute folders: " + bad);
+        return roots.Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToList();
+    }
     void SearchFolders()
     {
         if (!CanWrite()) return;
         var current = string.Join("; ", Discovery.Roots(settings));
-        var text = dialog.Text("Search folders", "Semicolon-separated folders scanned when creating or editing project groups.", current);
+        var text = dialog.Text("Search folders", "Folders whose immediate subfolders are offered as repositories in the group editor. Separate with ; . Leave empty to turn off discovery - the editor then shows registered repositories only.", current);
         if (text is null) return;
-        var roots = text.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(Path.GetFullPath).Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToList();
-        foreach (var root in roots) if (!Directory.Exists(root)) throw new InvalidOperationException("Folder does not exist: " + root);
+        var roots = ParseRoots(text);
         settings.Roots = roots; Config.Save(configPath, settings);
-        notice = roots.Count == 0 ? "Search folders cleared." : roots.Count + " search folder(s) saved.";
+        if (roots.Count == 0) { notice = "No search folders · group editor shows registered repos only"; return; }
+        var missing = roots.Where(r => !Directory.Exists(r)).ToList();
+        notice = "Saved " + roots.Count + " search folder" + (roots.Count == 1 ? "" : "s") + (missing.Count == 0 ? "" : " · not found: " + string.Join(", ", missing));
     }
     void Editor()
     {
@@ -583,7 +589,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
         "Branch, Sync and Commit open an explicit worktree checklist, including clean worktrees. A commit includes ALL staged files in each chosen worktree.\n\n" +
         "Each target gets its own result. Multi-repository operations are not atomic. Retry never repeats successful targets, and refuses to act if the checkout changed since the original preview.\n\n" +
         "Stage/unstage individual blocks via More. Discard unstaged restores tracked files from the index; Delete untracked is a separate action. Neither runs git clean.\n\n" +
-        "W creates, edits, renames, duplicates and deletes groups. Mix whole repos, fixed worktree paths and local branch refs. Branch entries follow their checkout; inactive branches still offer history. P shows the entire repo regardless of group membership.\n\n" +
+        "Groups are tabs: 1–9 or click to switch, [ ] cycle, Ctrl+N new, E edit/rename/duplicate/delete, W list. The editor ticks registered and discovered repositories (More → Search folders); new ones are registered on save.\n\n" +
         "Commits (Tab or H): the list shows the branch graph with ↑ on unpushed commits. Enter drills into a commit's files, then a file's diff; Esc goes back. / searches (words, @author, :path), F filters (unpushed, since a base), B chooses another branch or worktree, lowercase M selects a merge parent, D opens the difftool, V reviews a revert, Y copies the hash, Z zooms the preview. I includes the highlighted commit and its descendants in an interactive rebase, opening Git's real todo editor. A clean worktree and local branch are required. Use I again to continue, edit the remaining todo, amend an edit stop or abort.\n\n" +
         "Settings and saved groups are local to this machine. Local status refreshes automatically. Remote state only refreshes after an explicit Fetch/Pull. No background network polling.");
 }

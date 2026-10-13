@@ -106,5 +106,13 @@ static partial class Tests
             Check(draft.Checked.Contains(draft.Members.Single(m => m.Kind == "new-repo").Id), "Discovered repo ticked");
             Check(surface.Frames.Any(f => f.Contains("★ not registered")), "Discovered marker drawn");
         });
+        Test("search folders parse semicolon lists and reject relative paths", () => {
+            Equal("C:/repos|D:/src", string.Join("|", App.ParseRoots(" C:/repos ; ;D:/src ")), "Parsed roots");
+            Throws(() => App.ParseRoots("repos"), "Relative root accepted");
+        });
+        Test("search folders parsing de-duplicates case-insensitively on Windows", () => {
+            var roots = App.ParseRoots("C:/repos;c:/REPOS");
+            Equal(OperatingSystem.IsWindows() ? 1 : 2, roots.Count, "De-duplicated case-insensitively");
+        });
     }
 }

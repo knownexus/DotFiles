@@ -49,7 +49,8 @@ A missing worktree is reported, never silently labelled clean.
 | Search / filter | / / F |
 | Show / hide untracked files | T, click Untracked in the toolbar, or F → Show/hide untracked |
 | Add files or patterns to the project's .gitignore | G, or M → Add files or patterns to .gitignore |
-| Switch / create / edit / rename / duplicate / delete project groups | W |
+| Switch group tabs / scroll the tab strip | 1–9, click, or ‹ › |
+| New group / edit, rename, duplicate or delete the current tab (or right-click it) / list groups | Ctrl+N / E / W |
 | Open focused repository; choose another in Repo View | P |
 | Cycle groups (or repositories in Repo View) / go back | [ and ] / Backspace |
 | Review history of the focused branch or worktree | H |
@@ -139,18 +140,29 @@ automatically pruned.
 
 ## Groups, Repo View and history
 
-Press `W` to create any number of named project groups. The membership editor has
-checkboxes and repository section dividers, and lets you mix three kinds of entry:
+Groups appear as tabs under the title: `All projects`, `Secure QR 3`, … and `+`. Press
+`1`–`9` or click a tab to switch, `‹` / `›` scroll the strip when it overflows, `[` / `]`
+cycle group or repo, `Ctrl+N` or `+` create a group, and `E` (or right-click a tab) opens
+that tab's popup to edit members, rename, duplicate or delete it. `W` opens the same tabs,
+plus New group…, Edit current group… and Repo View…, as a list.
+
+The group editor has a **Name** field and a tree of repositories. It lists registered
+repositories and every repository found one level below your search folders (`Roots` in
+the config, default `C:/repos`; change them with More → Search folders…, and an empty
+value turns off discovery, so the editor shows registered repositories only). Ticking a
+repository marked `★ not registered` registers it under its folder name when you save.
+`Space` ticks, `W` switches a repository between **whole repo** (includes future
+worktrees) and **individual entries**, `B` shows its branches, `/` filters, `←` / `→` fold
+a repository's entries and `R` rescans the search folders. Registrations and the group are
+saved together, or not at all. A repository's entries are one of three kinds:
 
 - **Entire repository:** includes every registered worktree, including future ones.
 - **Worktree:** follows that exact checkout path, whichever branch it checks out.
 - **Branch:** follows a named local branch as it moves between worktrees. When it
   is not checked out, a branch row remains available for reviewing history.
 
-Selecting an entire repository includes its children. Uncheck it to choose individual
-entries. `/` filters the membership list. Existing groups can be edited, renamed,
-duplicated or deleted from the same `W` menu. Missing paths or refs are retained when
-editing, so temporary unavailability does not silently change a saved group.
+Missing paths or refs are retained when editing, so temporary unavailability does not
+silently change a saved group.
 
 `P` opens **Repo View** for the highlighted project. This view shows all of its
 worktrees and local branches, regardless of group membership. `[` / `]` cycle repos;

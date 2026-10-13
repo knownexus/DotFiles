@@ -5,6 +5,7 @@
     { "Name": "Joiners", "Path": "C:/repos/Joiners" },
     { "Name": "mobileApp", "Path": "C:/repos/mobileApp" }
   ],
+  "Roots": ["C:/repos"],
   "Groups": [
     { "Name": "Related projects", "Projects": ["AccessControl", "Joiners", "mobileApp"], "Worktrees": [], "Branches": [] },
     {

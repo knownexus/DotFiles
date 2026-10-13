@@ -26,18 +26,16 @@ public sealed partial class App
     void Workspace()
     {
         var groups = new[] { "All projects" }.Concat(settings.Groups.Select(g => g.Name)).ToList();
-        var options = groups.Concat(new[] { "+ Create project group…", "Edit group membership…", "Rename group…", "Duplicate group…", "Delete group…", "Repo View…" }).ToList();
+        var options = groups.Select((g, i) => (i < 9 ? $"{i + 1}  " : "   ") + g)
+            .Concat(["## Actions", "New group…  (Ctrl+N)", "Edit current group…  (E)", "Repo View…  (P)"]).ToList();
         var pick = dialog.Choose("Project groups", options, Math.Max(0, groups.IndexOf(view.State.Group)));
         if (pick is null) return;
-        if (pick < groups.Count) { view.Navigate(null, groups[pick.Value]); previewKey = ""; AfterScopeChange(); return; }
-        switch (pick - groups.Count)
+        if (pick < groups.Count) { SelectTab(pick.Value); return; }
+        switch (pick - groups.Count - 1)
         {
             case 0: EditGroup(); break;
-            case 1: var edit = PickGroup("Edit membership"); if (edit is not null) EditGroup(edit); break;
-            case 2: var rename = PickGroup("Rename group"); if (rename is not null) CopyGroup(rename, false); break;
-            case 3: var copy = PickGroup("Duplicate group"); if (copy is not null) CopyGroup(copy, true); break;
-            case 4: RemoveGroup(); break;
-            case 5: RepoView(true); break;
+            case 1: EditCurrentTab(); break;
+            case 2: RepoView(true); break;
         }
     }
     void Tab(Hit hit, bool edit)
