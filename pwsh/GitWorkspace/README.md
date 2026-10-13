@@ -177,20 +177,20 @@ main)`, `(origin/main)` and `(tag: v1)`. `↑` marks commits not yet pushed to t
 upstream. More commits load as you scroll; the tip is fixed when the list opens and `R`
 reloads. `/` searches: words match the message, `@name` the author and `:path` a file,
 all literal and case-insensitive. `F` shows all, unpushed only, or commits since a base.
-`B` (or `H`) picks another branch or worktree. Reviewing an inactive branch does not
+`B` (or `H`, or clicking the branch label in the view bar) picks another branch or worktree. Reviewing an inactive branch does not
 check it out.
 
 `Enter` moves into the commit's changed files, and `Enter` again shows one file's diff
 with the legend `− old: parent <hash>   + new: <hash> "<subject>"`. `M` picks the parent
 of a merge commit, `D` opens your difftool (files and diff levels only), `Esc` steps
-back and `Z` zooms the preview; `PgUp` / `PgDn` scroll it. `I` starts an interactive
+back (`Backspace` too) and `Z` or a double-click zooms the preview; `PgUp` / `PgDn` scroll it. `I` starts an interactive
 rebase from the highlighted commit, `V` reverts it, and `Y` copies its hash. Commit keys
 are case-insensitive except `Shift+Y` / `Shift+M`, which open Sync and More while
 Commits has focus. Selection keys (`S`, `U`, `C`, ...) are inert here; Tab back to Changes.
 
 ## Interactive rebase
 
-Highlight a worktree and press `I`, or open its history, highlight the **first commit
+Highlight a worktree and press `I`, or open Commits (`H`), highlight the **first commit
 to include**, and press `I`. You can also supply a base revision (such as `main` or
 `HEAD~3`) or include the root commit. A preview lists the affected commits before Git
 opens its real interactive todo editor. Reorder entries or use `reword`, `edit`,
