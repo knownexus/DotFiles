@@ -12,11 +12,11 @@ public static class History
             .Where(p => p.Length == 5 && !p[0].EndsWith("/HEAD", StringComparison.Ordinal))
             .Select(p => new BranchInfo(project, common, p[0], p[1], p[2], p[3].Length == 0 || p[4] == "[gone]" ? null : p[3])).ToList();
     }
-    // Default "since" base: the upstream when there is one, else main or master (each local before origin/), else empty.
+    // Default "since" base: the upstream when there is one, else local main or master, then origin/main or origin/master, else empty.
     public static string DefaultBase(string directory, string? upstream)
     {
         if (upstream is not null) return upstream;
-        foreach (var name in new[] { "main", "origin/main", "master", "origin/master" })
+        foreach (var name in new[] { "main", "master", "origin/main", "origin/master" })
             if (Git.Run(directory, "rev-parse", "--verify", "--quiet", "--end-of-options", name + "^{commit}").Ok) return name;
         return "";
     }
