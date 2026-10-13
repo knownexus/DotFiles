@@ -1,6 +1,7 @@
 namespace GitWorkspace;
 
-public sealed record CommitFilter(string Search = "", bool UnpushedOnly = false, string? Base = null);
+// Base is a resolved commit ID; BaseLabel keeps the name the user typed for display.
+public sealed record CommitFilter(string Search = "", bool UnpushedOnly = false, string? Base = null, string? BaseLabel = null);
 public sealed record GraphRow(string Graph, CommitInfo? Commit, List<string> Refs, bool Unpushed);
 public sealed record CommitFile(string Status, string Path, string? OldPath, int Added, int Removed);
 public sealed record CommitDetail(string Header, List<CommitFile> Files);

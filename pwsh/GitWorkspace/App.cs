@@ -127,7 +127,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
             var hit = hits.At(key.X, key.Y);
             if (view.Mode == ViewMode.Commits && commits is { } open)
             {
-                if (key.Wheel != 0) { if (hit?.Kind == "preview") previewScroll = Math.Max(0, previewScroll + key.Wheel); else open.Move(key.Wheel); return; }
+                if (key.Wheel != 0) { if (hit?.Kind == "preview") previewScroll = Math.Max(0, Math.Min(CommitsRender.Preview(open).Count - 1, previewScroll + key.Wheel)); else open.Move(key.Wheel); return; }
                 if (hit?.Kind == "row") {
                     open.Select(hit.Index); previewScroll = 0;
                     if (key.DoubleClick) dialog.Review(open.Target.Label, CommitsRender.Preview(open), confirm: false);
@@ -136,7 +136,7 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
                 if (hit?.Kind == "subject") { PickCommitSubject(); return; }
             }
             if (key.Wheel != 0) {
-                if (hit?.Kind == "preview") previewScroll = Math.Max(0, previewScroll + key.Wheel);
+                if (hit?.Kind == "preview") previewScroll = Math.Max(0, Math.Min(preview.Split('\n').Length - 1, previewScroll + key.Wheel));
                 else view.Focus = Math.Clamp(view.Focus + key.Wheel, 0, Math.Max(0, view.Rows.Count - 1));
                 return;
             }
@@ -265,9 +265,17 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
     void CommitFilterMenu(CommitsModel m)
     {
         var pick = dialog.Choose("Filter commits", ["All commits", "Unpushed only" + (m.Target.Upstream is null ? " (no upstream)" : ""), "Since a base (branch, tag or commit)…"]);
-        if (pick == 0) m.SetFilter(m.Filter with { UnpushedOnly = false, Base = null });
-        if (pick == 1) m.SetFilter(m.Filter with { UnpushedOnly = true, Base = null });
-        if (pick == 2 && dialog.Text("Since base", "Show commits after this base, e.g. main or origin/main.", m.Filter.Base ?? "main") is { Length: > 0 } b) m.SetFilter(m.Filter with { UnpushedOnly = false, Base = b });
+        if (pick == 0) m.SetFilter(m.Filter with { UnpushedOnly = false, Base = null, BaseLabel = null });
+        if (pick == 1) m.SetFilter(m.Filter with { UnpushedOnly = true, Base = null, BaseLabel = null });
+        if (pick != 2) return;
+        var text = dialog.Text("Since base", "Show commits after this base, e.g. main or origin/main.", m.Filter.BaseLabel ?? History.DefaultBase(m.Target.Directory, m.Target.Upstream))?.Trim();
+        if (text is null) return;
+        // The base is resolved here, so a typo or an option-like name never reaches git log and the old filter stays.
+        if (text.Length == 0 || text.StartsWith('-')) { dialog.Message("Since base", "Enter a branch, tag or commit to compare against."); return; }
+        string oid;
+        try { oid = History.Resolve(m.Target.Directory, text); }
+        catch (InvalidOperationException) { dialog.Message("Since base", $"'{text}' is not a branch, tag or commit in this repository."); return; }
+        m.SetFilter(m.Filter with { UnpushedOnly = false, Base = oid, BaseLabel = text });
     }
     void PickCommitSubject()
     {
@@ -286,8 +294,11 @@ public sealed partial class App(Settings settings, string configPath, bool demo 
     void RevertFromCommits(CommitsModel m, CommitInfo commit)
     {
         if (!CanWrite()) return;
+        // Same pinned-tip guard as RebaseFromCommit: only revert while the worktree still sits on the listed tip.
+        Refresh();
         var tree = view.Snapshot.Worktrees.FirstOrDefault(t => t.Id == m.Target.WorktreeId && t.Usable);
         if (tree is null) { dialog.Message("Revert commit", "Revert needs this branch checked out in a worktree. Use B → Checkout branch first."); return; }
+        if (Git.Head(tree) != m.Tip || tree.ActiveBranchRef != m.Target.BranchRef) { dialog.Message("History changed", "This worktree moved after its commits were listed. The list has been refreshed; select the intended commit again."); OpenCommits(Target(tree)); return; }
         if (Execute([Operations.Revert(tree, commit.Hash)])) m.Load();
     }
     void ToggleUntracked()

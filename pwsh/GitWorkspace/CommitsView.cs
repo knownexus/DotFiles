@@ -7,6 +7,14 @@ public sealed class CommitsModel(HistoryTarget target, Func<string, CommitFilter
 {
     readonly Dictionary<string, Task<CommitDetail>> details = [];
     readonly Dictionary<string, Task<string>> diffs = [];
+    const int CacheLimit = 200;
+    static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(150);
+    // Holding an arrow key must not start a detail load per commit passed: the preview waits until
+    // the focus has rested, and only one load runs at a time (the latest focus wins once it ends).
+    string? settleKey; DateTime settleSince; Task<CommitDetail>? loading;
+    internal Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
+    internal object? PreviewKey { get; set; }
+    internal List<StyledLine>? PreviewLines { get; set; }
     public HistoryTarget Target { get; } = target;
     public string? Tip { get; private set; }
     public string? Empty { get; private set; }
@@ -35,13 +43,16 @@ public sealed class CommitsModel(HistoryTarget target, Func<string, CommitFilter
         catch (InvalidOperationException) { Tip = null; Exhausted = true; Empty = "No commits yet on this branch."; return; }
         LoadMore();
         Focus = Math.Max(0, Rows.FindIndex(r => r.Commit is not null));
-        if (!Rows.Any(r => r.Commit is not null)) Empty = "No commits match this search or filter.";
+        if (Empty is null && !Rows.Any(r => r.Commit is not null)) Empty = "No commits match this search or filter.";
     }
     void LoadMore()
     {
         if (Tip is null || Exhausted) return;
         int loaded = Rows.Count(r => r.Commit is not null);
-        var more = read(Tip, Filter, loaded, batch);
+        List<GraphRow> more;
+        // This also runs from rendering (EnsureLoaded), so a failing range must never throw.
+        try { more = read(Tip, Filter, loaded, batch); }
+        catch (InvalidOperationException e) { Exhausted = true; Empty = "Unable to read commits: " + e.Message; return; }
         if (more.Count(r => r.Commit is not null) < batch) Exhausted = true;
         Rows.AddRange(more);
     }
@@ -92,8 +103,25 @@ public sealed class CommitsModel(HistoryTarget target, Func<string, CommitFilter
         if (Commit is not { } commit) return null;
         string key = commit.Hash + ":" + Parent; int parent = Parent;
         if (details.TryGetValue(key, out var old) && old.IsFaulted) details.Remove(key);
-        if (!details.TryGetValue(key, out var task)) details[key] = task = Task.Run(() => detail(commit, parent));
+        if (!details.TryGetValue(key, out var task)) {
+            if (details.Count >= CacheLimit) details.Clear();
+            details[key] = task = loading = Task.Run(() => detail(commit, parent));
+        }
         return task;
+    }
+    // The per-frame preview path: an already loaded detail is returned at once, otherwise a load
+    // starts only after the focus has been stable for Settle and no other load is running.
+    public Task<CommitDetail>? SettledDetail()
+    {
+        if (Commit is not { } commit) return null;
+        string key = commit.Hash + ":" + Parent;
+        // A failure stays on screen rather than retrying every frame; Enter and file moves retry it.
+        if (details.TryGetValue(key, out var cached)) return cached;
+        if (Level != CommitLevel.Commits) return DetailTask();
+        var now = Clock();
+        if (key != settleKey) { settleKey = key; settleSince = now; return null; }
+        if (now - settleSince < Settle || loading is { IsCompleted: false }) return null;
+        return DetailTask();
     }
     public CommitFile? File => DetailTask() is { IsCompletedSuccessfully: true } d ? d.Result.Files.ElementAtOrDefault(FileFocus) : null;
     public Task<string>? DiffTask()
@@ -101,7 +129,10 @@ public sealed class CommitsModel(HistoryTarget target, Func<string, CommitFilter
         if (Commit is not { } commit || File is not { } file) return null;
         string key = commit.Hash + ":" + Parent + ":" + file.Path; int parent = Parent;
         if (diffs.TryGetValue(key, out var old) && old.IsFaulted) diffs.Remove(key);
-        if (!diffs.TryGetValue(key, out var task)) diffs[key] = task = Task.Run(() => diff(commit, parent, file));
+        if (!diffs.TryGetValue(key, out var task)) {
+            if (diffs.Count >= CacheLimit) diffs.Clear();
+            diffs[key] = task = Task.Run(() => diff(commit, parent, file));
+        }
         return task;
     }
 }
@@ -111,7 +142,7 @@ public static class CommitsRender
     const int SubjectX = 40; // after the " Changes  Worktrees  [Commits]" labels drawn by Screen
     public static void Body(Canvas c, Layout layout, HitMap hits, CommitsModel model, int previewScroll)
     {
-        var subject = model.Target.Label + " ▾" + (model.Filter.Search.Length > 0 ? "   / " + model.Filter.Search : "") + (model.Filter.UnpushedOnly ? "   · unpushed" : model.Filter.Base is { } b ? "   · since " + b : "");
+        var subject = model.Target.Label + " ▾" + (model.Filter.Search.Length > 0 ? "   / " + model.Filter.Search : "") + (model.Filter.UnpushedOnly ? "   · unpushed" : model.Filter.Base is { } b ? "   · since " + (model.Filter.BaseLabel ?? b) : "");
         int room = Math.Max(0, layout.ViewBar.Width - SubjectX - 2);
         c.Text(SubjectX, layout.ViewBar.Y, subject, Ink.Accent, room); hits.Add(SubjectX, layout.ViewBar.Y, Math.Min(subject.Length, room), new Hit("subject"));
         // Narrow terminals show deeper levels in place of the list.
@@ -143,10 +174,21 @@ public static class CommitsRender
             if (refs.Length > 0 && rx + refs.Length <= area.Width - 2) c.Text(rx, row, refs, Ink.Ref, refs.Length, focus);
         }
     }
+    sealed record PreviewState(CommitInfo Commit, int Parent, CommitLevel Level, int FileFocus, Task<CommitDetail>? Detail, bool DetailDone, Task<string>? Diff, bool DiffDone);
+    // Called every frame, so the parsed and rendered lines are reused until something they show changes.
     public static List<StyledLine> Preview(CommitsModel model)
     {
         if (model.Commit is not { } commit) return [new(model.Empty ?? "", Ink.Muted)];
-        var detailTask = model.DetailTask();
+        var detailTask = model.SettledDetail();
+        var diffTask = model.Level == CommitLevel.FileDiff && detailTask is { IsCompletedSuccessfully: true } ? model.DiffTask() : null;
+        var state = new PreviewState(commit, model.Parent, model.Level, model.FileFocus, detailTask, detailTask?.IsCompleted == true, diffTask, diffTask?.IsCompleted == true);
+        if (Equals(state, model.PreviewKey) && model.PreviewLines is { } cached) return cached;
+        var lines = Build(model, commit, detailTask, diffTask);
+        model.PreviewKey = state; model.PreviewLines = lines;
+        return lines;
+    }
+    static List<StyledLine> Build(CommitsModel model, CommitInfo commit, Task<CommitDetail>? detailTask, Task<string>? diffTask)
+    {
         if (detailTask is not { IsCompleted: true }) return [new("Loading…", Ink.Muted)];
         if (!detailTask.IsCompletedSuccessfully) return [new(detailTask.Exception?.GetBaseException().Message ?? "Unable to read commit.", Ink.Bad)];
         var detail = detailTask.Result;
@@ -154,13 +196,12 @@ public static class CommitsRender
         string parentShort = parentHash[..Math.Min(7, parentHash.Length)];
         if (model.Level == CommitLevel.FileDiff)
         {
-            var diffTask = model.DiffTask();
             if (diffTask is not { IsCompleted: true }) return [new("Loading…", Ink.Muted)];
             if (!diffTask.IsCompletedSuccessfully) return [new(diffTask.Exception?.GetBaseException().Message ?? "Unable to read diff.", Ink.Bad)];
             return DiffView.Render(DiffView.Parse(diffTask.Result), DiffSides.ForCommit(parentShort, commit.ShortHash, commit.Subject));
         }
         List<StyledLine> lines = [.. Styled.FromText(detail.Header).Select(l => l with { Ink = l.Text.StartsWith("commit ") ? Ink.Accent : Ink.Text })];
-        if (commit.Parents.Count > 1) lines.Add(new($"Comparing with parent {model.Parent + 1} of {commit.Parents.Count} ({parentShort}) · M switches", Ink.Warning));
+        if (commit.Parents.Count > 1) lines.Add(new($"Comparing with parent {model.Parent + 1} of {commit.Parents.Count} ({parentShort}) · m switches", Ink.Warning));
         int added = detail.Files.Where(f => f.Added > 0).Sum(f => f.Added), removed = detail.Files.Where(f => f.Removed > 0).Sum(f => f.Removed);
         lines.Add(new("", Ink.Text)); lines.Add(new($"{detail.Files.Count} files  +{added} −{removed}" + (model.Level == CommitLevel.Files ? "   ↑↓ file · Enter diff · Esc back" : "   Enter to browse files"), Ink.Heading));
         for (int i = 0; i < detail.Files.Count; i++) {
