@@ -43,7 +43,7 @@ A missing worktree is reported, never silently labelled clean.
 | Move focus / select checkbox | Arrow keys / Space; mouse supported on Windows |
 | Open diff on demand | Enter / D; or click Open diff |
 | Collapse a project or worktree | Left / Right, or click the disclosure arrow |
-| Changes / worktree selection | Tab, or click Changes / Worktrees in the view bar |
+| Changes / Worktrees / Commits | Tab, or click the view bar |
 | Select all visible / clear selection | A / X |
 | Resize the preview split | < / > |
 | Search / filter | / / F |
@@ -53,7 +53,7 @@ A missing worktree is reported, never silently labelled clean.
 | New group / edit, rename, duplicate or delete the current tab (or right-click it) / list groups | Ctrl+N / E / W |
 | Open focused repository; choose another in Repo View | P |
 | Cycle groups (or repositories in Repo View) / go back | [ and ] / Backspace |
-| Review history of the focused branch or worktree | H |
+| Commits of the focused branch or worktree | H, or Tab to Commits |
 | Interactive rebase / manage a paused rebase | I |
 | Stage / unstage | S / U |
 | Commit all staged changes in chosen worktrees | C |
@@ -171,15 +171,22 @@ Press `P` again to pick a different repo, or `W` to switch to a group. Inactive 
 rows have no operation checkbox; `B` can check them out in an existing worktree or
 create a new worktree for the existing branch. The shell stays in its original directory.
 
-`H` opens commit history for the focused branch/worktree; on a project heading it
-offers a branch/worktree picker. Repo View also opens history with Enter on those rows.
-History shows hash, date, author and subject. `Enter` / `D` (or **Open diff**) loads the
-full message, file summary and patch. Moving between commits does not load patches.
-Wide terminals show basic commit details beside the list. `M` chooses
-which parent to compare for a merge commit, and `PgUp` / `PgDn` scroll the preview.
-`N` / `P` page through the full history, `B` selects another branch/worktree, and `R`
-refreshes. History pins the tip while browsing, so new commits do not shift pages.
-Reviewing an inactive branch does not check it out. `/` searches branch/group pickers.
+`H` (or Tab to **Commits**) shows the focused branch or worktree's commits beside the
+preview: a graph, short hash, relative date, subject and ref labels such as `(HEAD →
+main)`, `(origin/main)` and `(tag: v1)`. `↑` marks commits not yet pushed to the
+upstream. More commits load as you scroll; the tip is fixed when the list opens and `R`
+reloads. `/` searches: words match the message, `@name` the author and `:path` a file,
+all literal and case-insensitive. `F` shows all, unpushed only, or commits since a base.
+`B` (or `H`) picks another branch or worktree. Reviewing an inactive branch does not
+check it out.
+
+`Enter` moves into the commit's changed files, and `Enter` again shows one file's diff
+with the legend `− old: parent <hash>   + new: <hash> "<subject>"`. `M` picks the parent
+of a merge commit, `D` opens your difftool (files and diff levels only), `Esc` steps
+back and `Z` zooms the preview; `PgUp` / `PgDn` scroll it. `I` starts an interactive
+rebase from the highlighted commit, `V` reverts it, and `Y` copies its hash. Commit keys
+are case-insensitive except `Shift+Y` / `Shift+M`, which open Sync and More while
+Commits has focus. Selection keys (`S`, `U`, `C`, ...) are inert here; Tab back to Changes.
 
 ## Interactive rebase
 

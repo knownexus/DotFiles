@@ -54,7 +54,7 @@ function global:gws {
 
 Register-ArgumentCompleter -CommandName gws -ScriptBlock {
     param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
-    'status', 'add', 'build', 'test', '--demo', '--snapshot', '--help', '--config', '--json', '--root' |
+    'status', 'add', 'build', 'test', '--demo', '--snapshot', 'commits', '--help', '--config', '--json', '--root' |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
 }
