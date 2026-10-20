@@ -15,7 +15,7 @@ if (Get-Module -Name PSReadLine) {
     $rlVersion = (Get-Module PSReadLine).Version
     if ($rlVersion -ge [version]'2.1') {
         Set-PSReadLineOption -PredictionSource History
-        if ($rlVersion -ge [version]'2.2') {
+        if ($rlVersion -ge [version]'2.3') {
             # ListView groups suggestions by source under a labelled header
             # (History first, then each plugin, e.g. SignatureHints) -- live,
             # in-terminal, non-modal, exactly like InlineView but showing all
@@ -23,9 +23,15 @@ if (Get-Module -Name PSReadLine) {
             # preserve a plugin-embedded custom color per item (tried and
             # confirmed: ListView's highlighting pass overwrites it), so
             # suggestions render in PSReadLine's normal ListPrediction color
-            # -- distinguishable by section header, not by color. Requires
-            # 2.2+, same as the plugin predictor below; older PSReadLine
-            # falls back to InlineView.
+            # -- distinguishable by section header, not by color.
+            #
+            # Requires 2.3+, not just 2.2 where ListView first appeared:
+            # 2.2's list has a fixed height and copes badly with the screen
+            # scrolling under it, so near the bottom of the window it can
+            # leave rows of old suggestions behind. 2.3.0 made the list size
+            # itself to the space available and stop once its first line
+            # scrolls off (PowerShell/PSReadLine#3583, #3372). On 2.2 the
+            # plugin predictor below still works, one suggestion at a time.
             Set-PSReadLineOption -PredictionViewStyle ListView
         } else {
             Set-PSReadLineOption -PredictionViewStyle InlineView
@@ -56,7 +62,10 @@ if (Get-Module -Name PSReadLine) {
                 )
                 Set-PSReadLineOption -PredictionSource HistoryAndPlugin
 
-                # Cycle History-only -> SignatureHints-only -> both (Ctrl+Spacebar)
+                # Cycle History-only -> SignatureHints-only -> both (Alt+/).
+                # Not Alt+p either: that's taken by the projection command.
+                # Not Ctrl+Space: Windows grabs it for the input-method switch
+                # and PSReadLine already uses it for MenuComplete.
                 # -- useful when the two sources' suggestions for the same
                 # prefix crowd each other out in the list.
                 function global:Switch-PredictionSource {
@@ -85,7 +94,7 @@ if (Get-Module -Name PSReadLine) {
                     [Microsoft.PowerShell.PSConsoleReadLine]::Insert(' ')
                     [Microsoft.PowerShell.PSConsoleReadLine]::BackwardDeleteChar()
                 }
-                Set-PSReadLineKeyHandler -Key Ctrl+Spacebar -ScriptBlock {
+                Set-PSReadLineKeyHandler -Key Alt+/ -BriefDescription SwitchPredictionSource -ScriptBlock {
                     param($key, $arg)
                     Switch-PredictionSource
                 }
@@ -124,10 +133,7 @@ if (Get-Module -ListAvailable -Name posh-git -ErrorAction SilentlyContinue) {
 # Completes the last path segment of each worktree (e.g. "feature\ABC-123-foo" → "ABC-123-foo")
 $script:WtCompleter = {
     param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
-    git worktree list --porcelain 2>$null |
-        Where-Object { $_ -match '^worktree ' } |
-        ForEach-Object { $_ -replace '^worktree ', '' } |
-        Where-Object { $_ -notmatch '\.git$' } |  # skip bare repo entry
+    Get-GitWorktreePaths |
         ForEach-Object { Split-Path $_ -Leaf } |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object {
@@ -191,6 +197,9 @@ Register-ArgumentCompleter -CommandName gitb -ScriptBlock $script:LocalBranchCom
 # gri / grim have a named -Target param.
 Register-ArgumentCompleter -CommandName gri  -ParameterName Target -ScriptBlock $script:LocalBranchCompleter
 Register-ArgumentCompleter -CommandName grim -ParameterName Target -ScriptBlock $script:LocalBranchCompleter
+
+# grsi has a named -Source param (the branch this one was created from).
+Register-ArgumentCompleter -CommandName grsi -ParameterName Source -ScriptBlock $script:AllBranchCompleter
 
 # pushdr has a named -RemoteBranch param.
 Register-ArgumentCompleter -CommandName pushdr -ParameterName RemoteBranch -ScriptBlock $script:RemoteBranchCompleter

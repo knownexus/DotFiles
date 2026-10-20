@@ -1,7 +1,9 @@
 # SSH wrappers with title-stack integration -- mirrors zsh 20-ssh
 # Requires 00-window-title.ps1 to be loaded first.
 
-$script:_sshCmd = Get-Command ssh -CommandType Application -ErrorAction SilentlyContinue
+# Several ssh.exe can be on PATH (Windows OpenSSH, Git's usr\bin); take the first,
+# otherwise .Source is an array and & runs the two paths joined by a space.
+$script:_sshCmd = Get-Command ssh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 $script:SshExe  = if ($script:_sshCmd) { $script:_sshCmd.Source } else { $null }
 
 if ($script:SshExe) {

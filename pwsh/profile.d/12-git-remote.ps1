@@ -5,12 +5,26 @@ function global:gitf  { git fetch @args }
 function global:gitpl { git pull --rebase @args }
 
 # Push (force) — confirms and shows the upstream that would be overwritten
+# --force-with-lease refuses the push if the remote has commits your
+# remote-tracking ref does not know about, so you cannot silently flatten
+# someone else's work. --force-if-includes closes the hole in it: a plain
+# lease check passes if you merely FETCHED their commits without integrating
+# them, because the tracking ref then looks current. Together they mean
+# "overwrite only what I have actually seen and built on".
 function script:Confirm-ForcePush {
     $upstream = git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>$null
     if (-not $upstream) { $upstream = '<no upstream configured>' }
-    Write-Host "This will force-push and overwrite history on: $upstream" -ForegroundColor Yellow
-    $ans = Read-Host "Proceed with git push --force $($args -join ' ')? (y/n)"
-    if ($ans -eq 'y') { git push --force @args }
+    Write-Host "Force-push (with lease) to: $upstream" -ForegroundColor Yellow
+    $ans = Read-Host "Proceed? (y/n)"
+    if ($ans -ne 'y') { return }
+
+    git push --force-with-lease --force-if-includes @args
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ''
+        Write-Host "If this was rejected as 'stale info', the remote moved since your last" -ForegroundColor Yellow
+        Write-Host "fetch - that is the lease doing its job. Run 'gitf' and look at what"   -ForegroundColor Yellow
+        Write-Host "arrived before deciding; re-running with --force would discard it."     -ForegroundColor Yellow
+    }
 }
 function global:gpf   { Confirm-ForcePush @args }
 function global:gitfp { Confirm-ForcePush @args }

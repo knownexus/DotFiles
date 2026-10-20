@@ -136,17 +136,14 @@ function global:prompt {
 
     $location = Get-ShortPath "$(Get-Location)"
 
+    $branchPart = ''
     $vcs = Get-VcsInfo
     if ($vcs) {
         $statusSuffix = if ($vcs.Flags) { ",$($vcs.Flags)" } else { '' }
         $branchLabel  = if ($vcs.IsWorktree) { "wt:$($vcs.Branch)" } else { $vcs.Branch }
         $branchPart   = "[${branchLabel}:$($vcs.Revno)$statusSuffix]"
-        $rightColored = "${yellow}${location}${reset} ${cyan}${branchPart}${reset}"
-        $rightPlain   = "$location $branchPart"
     } else {
         $location     = Get-TruncatedPath $location
-        $rightColored = "${yellow}${location}${reset}"
-        $rightPlain   = $location
     }
 
     # Background job count and exit-code indicator, shown just before the $
@@ -171,10 +168,40 @@ function global:prompt {
     # so the prompt still occupies two rows.
     $width = $Host.UI.RawUI.WindowSize.Width
     # Leave the last column empty -- writing into it wraps on some terminals.
-    $pad   = $width - $rightPlain.Length - 1
-    if ($pad -lt 0) { $pad = 0 }
+    $maxWidth = [Math]::Max(1, $width - 1)
 
-    Write-Host (' ' * $pad) -NoNewline
+    # The info line must never wrap. ExtraPromptLineCount (30-settings.ps1)
+    # tells PSReadLine the prompt is exactly two rows; a long worktree path or
+    # branch in a narrow pane used to wrap it onto a third, and any redraw
+    # that goes back up to rewrite the prompt (PSReadLine's InvokePrompt)
+    # then landed a row off and left fragments behind. The path gives way
+    # first, from the left -- the folder you're in is the useful end -- then
+    # the branch name, from the right, keeping the revision and status flags.
+    if ($vcs -and $branchPart.Length -gt $maxWidth) {
+        $branchTail = ":$($vcs.Revno)$statusSuffix]"
+        $labelRoom  = $maxWidth - 1 - $branchTail.Length
+        $branchPart = if ($labelRoom -gt 3) { '[' + $branchLabel.Substring(0, $labelRoom - 3) + '...' + $branchTail }
+                      else { $branchPart.Substring(0, $maxWidth) }
+    }
+    $room = $maxWidth - $branchPart.Length - $(if ($branchPart) { 1 } else { 0 })
+    if ($location.Length -gt $room) {
+        $location = if ($room -gt 3) { '...' + $location.Substring($location.Length - ($room - 3)) }
+                    elseif ($room -gt 0) { $location.Substring($location.Length - $room) }
+                    else { '' }
+    }
+    $rightPlain   = (@($location, $branchPart) | Where-Object { $_ }) -join ' '
+    $rightColored = @(
+        if ($location)   { "${yellow}${location}${reset}" }
+        if ($branchPart) { "${cyan}${branchPart}${reset}" }
+    ) -join ' '
+
+    # Start from column 0, like zsh's PROMPT_SP. Output that didn't end in a
+    # newline (a native tool, Write-Host -NoNewline, a file with no trailing
+    # newline) leaves the cursor mid-row, and padding from there wraps the
+    # info line onto a third row exactly as above.
+    try { if ([Console]::CursorLeft -ne 0) { Write-Host '' } } catch { }
+
+    Write-Host (' ' * ($maxWidth - $rightPlain.Length)) -NoNewline
     Write-Host $rightColored
 
     return "${jobPart}${errorPart}${blue}`$ ${reset}"

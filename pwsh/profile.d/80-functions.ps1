@@ -261,22 +261,9 @@ repos-status scans a directory of repos and reports which need attention
 #>
 # Workspace
 function global:repos-status {
-    param([string]$Root = 'C:\repos')
-    $any = $false
-    Get-ChildItem $Root -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-        $dir = $_.FullName
-        if (-not (git -C $dir rev-parse --is-inside-work-tree 2>$null)) { return }
-        $dirty = git -C $dir status --porcelain 2>$null
-        $ahead = git -C $dir rev-list --count '@{upstream}..HEAD' 2>$null
-        $parts = @()
-        if ($dirty) { $parts += "$((@($dirty)).Count) uncommitted" }
-        if ($ahead -and [int]$ahead -gt 0) { $parts += "$ahead unpushed" }
-        if ($parts.Count -gt 0) {
-            $any = $true
-            Write-Host "  $($_.Name): $($parts -join ', ')"
-        }
-    }
-    if (-not $any) { Write-Host "All repos under $Root are clean and pushed." -ForegroundColor Green }
+    param([string]$Root)
+    if ($Root) { gws status --root $Root }
+    else { gws status }
 }
 
 # Find-and-replace across all files under a path (mirrors fr)

@@ -52,14 +52,15 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         // Git — stash
         "gp", "git-stash-pop", "gst", "gstl", "stash", "stashp",
         // Git — rebase
-        "gri", "grim", "rebaseon", "grof",
-        "grd", "grm", "gro", "groi", "grod",
+        "gri", "grim", "grsi", "rebaseon", "grof",
+        "grd", "grm", "grmi", "gro", "groi", "grod", "gromi",
         "gitra", "gitra2", "gitrc", "groot", "gup",
         // Git — reverted
         "grev-clean", "grev-scan",
         // Git — misc
         "rs", "update", "updated",
         // Git — worktree
+        "gws",
         "wt-go", "wt-gof", "wt-list", "wt-feature", "wt-fix", "wt-c", "gitcf",
         "wt-done", "wt-done-f", "wt!", "wt-prune", "wt-setup", "wt-init", "wt-workspace", "wt-default-base", "fix-fetch-refspecs",
     };
@@ -97,6 +98,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "ssh" or "ssx"              => new[] { "<host>", "[args]" },
 
         // ── Workspace / trash ────────────────────────────────────────────────────
+        "gws"                       => new[] { "[status|add|build|test|--demo|--snapshot|--config|--help]" },
         "repos-status"              => new[] { "[root]" },
         "trash-restore"             => new[] { "<name>" },
 
@@ -145,6 +147,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
 
         // ── Git — rebase ─────────────────────────────────────────────────────────
         "gri"  or "grim"            => new[] { "[target|HEAD~N]" },
+        "grsi"                      => new[] { "[source-branch]" },
         "rebaseon"                  => new[] { "<branch-fragment>" },
 
         // ── Git — reverted changes ───────────────────────────────────────────────
@@ -170,6 +173,28 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         _                           => null,
     };
 
+    // Commands with subcommands: each entry is (subcommand, remaining args).
+    // Typing just the command lists every form; typing a subcommand hints its
+    // own arguments instead of the command's generic signature.
+    private static readonly Dictionary<string, (string Sub, string[] Sig)[]> SubCommands =
+        new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["gws"] = new[]
+        {
+            ("status",     new[] { "[--json]", "[--root <path>]" }),
+            ("add",        new[] { "<name>", "<path>" }),
+            ("build",      Array.Empty<string>()),
+            ("test",       Array.Empty<string>()),
+            ("--demo",     Array.Empty<string>()),
+            ("--snapshot", new[] { "[width]", "[height]" }),
+            ("--config",   new[] { "<path>" }),
+            ("--help",     Array.Empty<string>()),
+        },
+    };
+
+    private static string Join(string head, string[] sig) =>
+        sig.Length > 0 ? head + " " + string.Join(" ", sig) : head;
+
     public bool CanAcceptFeedback(PredictionClient client, PredictorFeedbackKind feedback) => false;
 
     public SuggestionPackage GetSuggestion(
@@ -184,6 +209,35 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         var sig = GetSig(cmd);
 
         var suggestions = new List<PredictiveSuggestion>();
+
+        // Subcommand-aware hints (e.g. "gws", "gws st", "gws add foo").
+        if (SubCommands.TryGetValue(cmd, out var subs))
+        {
+            var typed = text.TrimEnd();
+            if (parts.Length == 1)
+            {
+                foreach (var (sub, subSig) in subs)
+                    suggestions.Add(new PredictiveSuggestion(Join(typed + " " + sub, subSig)));
+            }
+            else
+            {
+                var exact = Array.Find(subs, x => x.Sub.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
+                if (exact.Sub != null)
+                {
+                    var provided = parts.Length - 2;
+                    if (provided < exact.Sig.Length)
+                        suggestions.Add(new PredictiveSuggestion(Join(typed, exact.Sig[provided..])));
+                }
+                else if (parts.Length == 2)
+                {
+                    var head = typed[..(typed.Length - parts[1].Length)];
+                    foreach (var (sub, subSig) in subs)
+                        if (sub.StartsWith(parts[1], StringComparison.OrdinalIgnoreCase))
+                            suggestions.Add(new PredictiveSuggestion(Join(head + sub, subSig)));
+                }
+            }
+            sig = null; // generic signature superseded by the subcommand hints above
+        }
 
         // Exact command match — append remaining argument hints. Doesn't
         // return early: some commands (e.g. "g", the grep-search alias) are
@@ -202,6 +256,14 @@ public sealed class SignatureHintPredictor : ICommandPredictor
                 suggestions.Add(new PredictiveSuggestion(suggestion));
             }
         }
+
+        // Flag / subcommand hints for external tools (git, docker, devenv, ...)
+        // and the git aliases that forward to them -- see CommandHints.cs.
+        var hints = new List<string>();
+        CommandHints.Collect(text, hints, 200);
+        foreach (var hint in hints)
+            if (!suggestions.Exists(s => s.SuggestionText.Equals(hint, StringComparison.OrdinalIgnoreCase)))
+                suggestions.Add(new PredictiveSuggestion(hint));
 
         // Partial prefix — suggest other known commands that start with the
         // typed text. Only fires when the user has typed a single word (no

@@ -138,6 +138,20 @@ Two real fixes came back the other way:
 > yet. Shared with the zsh side as `Resolve-WtPrimaryBranch` /
 > `_wt_resolve_primary`.
 
+Added since:
+
+> **Interactive rebase shortcuts** — `grmi` rebases onto `origin/main`
+> or `origin/master`, whichever the repo has (the local branch is only
+> used if origin has no copy); `gromi` does the same after a fetch. `grsi
+> [-Source <branch>]` rewrites just this branch's own commits from where
+> it forked, without moving the base. With no source it works out the
+> branch it came from via the reflog (`Created from X`, or the checkout it
+> was made in), then falls back to `wt.default-base`, `develop`, then
+> main/master. It checks both the local and `origin/` copy of the source
+> and uses the nearer fork point, so a stale local `develop` can't pull
+> extra commits into the todo list. Extra args go to `git rebase`
+> (`grsi --autosquash`). Same names and behaviour on the zsh side.
+
 ## Key bindings
 
 | Key | Action |
@@ -147,7 +161,7 @@ Two real fixes came back the other way:
 | `→` | Accept the whole inline suggestion (cursor at end of line) |
 | `F2` | Switch the prediction display: inline ghost text ↔ grouped list |
 | `F4` | Full tooltip for the selected list item |
-| `Ctrl+Space` | Cycle the prediction source — see sig-predictor below |
+| `Alt+/` | Cycle the prediction source — see sig-predictor below |
 | `Alt+H` | Parameter help for the command on the line |
 | `Tab` / `Shift+Tab` | Complete, or open the arrow-key-navigable menu |
 | `Ctrl+D` | Delete the char under the cursor; exit when the line is empty |
@@ -185,7 +199,7 @@ added to its argument-hint table (`copy`, `view`, `cheat`, `doctor`,
 
 Predictions come from two sources at once (`HistoryAndPlugin`), shown as
 separate, labelled groups in PSReadLine's ListView. When one source
-crowds the other out for a prefix, `Ctrl+Space` cycles which is live:
+crowds the other out for a prefix, `Alt+/` cycles which is live:
 History only → SignatureHints only → both, with the current mode shown
 in the window title until the next prompt redraw. `F2` switches between
 that list and plain inline ghost text.
@@ -205,3 +219,16 @@ that list and plain inline ghost text.
 - **A numbered `cd -N`** — PowerShell's location stack doesn't support
   indexed access the way zsh's dirstack does; `Pop-Location` (single
   step back) is the closest built-in equivalent.
+
+## Git Workspace UI
+
+Run `gws` from any directory for the project-section checklist, diff preview,
+batch stage/unstage and commit, branch/worktree operations, push/pull/rebase,
+saved feature groups and operation results. `gws --demo` uses sample data.
+
+See [Git Workspace](GitWorkspace/README.md) for setup, key bindings and operation
+semantics. The profile loads its launcher automatically; building is lazy and
+requires the .NET 10 SDK. `repos-status` now includes registered linked worktrees.
+
+The workspace app is verified independently on Windows with temporary Git
+repositories; the historical testing disclaimer above describes older profile work.

@@ -21,6 +21,70 @@ _help_print() {
 # ---------------------------------------------------------------------------
 # Status
 # ---------------------------------------------------------------------------
+# In-progress operation (rebase / merge / cherry-pick / revert / am / bisect).
+#
+# Plain `git status` prints this prominently ("interactive rebase in progress;
+# onto bf25f47"), and gstat replaces git status — so without this you lose the
+# single most important thing on screen when a rebase stops on a conflict.
+#
+# State lives in files under the git dir; `git rev-parse --git-path` resolves
+# them correctly inside worktrees, where .git is a file rather than a folder.
+_git_progress_state() {
+    local esc=$'\033'
+    local reset="${esc}[0m" bold="${esc}[1m" yellow="${esc}[33m" gray="${esc}[90m"
+
+    local gp label detail hint
+    gp=$(git rev-parse --git-path rebase-merge 2>/dev/null)
+    if [[ -d "$gp" ]]; then
+        local num end head onto
+        num=$(cat "$gp/msgnum" 2>/dev/null)
+        end=$(cat "$gp/end" 2>/dev/null)
+        head=$(cat "$gp/head-name" 2>/dev/null)
+        onto=$(git rev-parse --short=7 "$(cat "$gp/onto" 2>/dev/null)" 2>/dev/null)
+        [[ -f "$gp/interactive" ]] && label='REBASE -i' || label='REBASE'
+        detail="${num:-?}/${end:-?}  onto ${onto}  (${head#refs/heads/})"
+        hint='gitrc = continue   gitra = abort   git rebase --skip'
+    else
+        gp=$(git rev-parse --git-path rebase-apply 2>/dev/null)
+        if [[ -d "$gp" ]]; then
+            local num last head
+            num=$(cat "$gp/next" 2>/dev/null)
+            last=$(cat "$gp/last" 2>/dev/null)
+            head=$(cat "$gp/head-name" 2>/dev/null)
+            if [[ -f "$gp/applying" ]]; then
+                label='AM'
+                hint='git am --continue   git am --abort'
+            else
+                label='REBASE'
+                hint='gitrc = continue   gitra = abort   git rebase --skip'
+            fi
+            detail="${num:-?}/${last:-?}${head:+  (${head#refs/heads/})}"
+        elif [[ -f "$(git rev-parse --git-path MERGE_HEAD 2>/dev/null)" ]]; then
+            label='MERGE'
+            detail="merging $(git rev-parse --short=7 MERGE_HEAD 2>/dev/null)"
+            hint='git merge --continue   git merge --abort'
+        elif [[ -f "$(git rev-parse --git-path CHERRY_PICK_HEAD 2>/dev/null)" ]]; then
+            label='CHERRY-PICK'
+            detail="picking $(git rev-parse --short=7 CHERRY_PICK_HEAD 2>/dev/null)"
+            hint='git cherry-pick --continue   git cherry-pick --abort'
+        elif [[ -f "$(git rev-parse --git-path REVERT_HEAD 2>/dev/null)" ]]; then
+            label='REVERT'
+            detail="reverting $(git rev-parse --short=7 REVERT_HEAD 2>/dev/null)"
+            hint='git revert --continue   git revert --abort'
+        elif [[ -f "$(git rev-parse --git-path BISECT_LOG 2>/dev/null)" ]]; then
+            label='BISECT'
+            detail="$(git bisect log 2>/dev/null | grep -c '^git bisect good\|^git bisect bad') step(s) recorded"
+            hint='git bisect good / bad   git bisect reset'
+        else
+            return 1
+        fi
+    fi
+
+    echo "${bold}${yellow}${label}${reset} ${detail}"
+    echo "${gray}        ${hint}${reset}"
+    return 0
+}
+
 gstat() {
     local esc=$'\033'
     local reset="${esc}[0m"  bold="${esc}[1m"
@@ -39,6 +103,7 @@ gstat() {
     [[ -n "$behind" && "$behind" -gt 0 ]] && behind_str=" ${red}${dn}${behind}${reset}"
 
     echo "${bold}branch:${reset} ${cyan}${branch}${reset} ${gray}${revno}${reset}${ahead_str}${behind_str}"
+    _git_progress_state
     echo ""
 
     local lines staged unstaged conflicts untracked l label
@@ -308,13 +373,29 @@ gclean() {
 # Push
 # ---------------------------------------------------------------------------
 # Force-push — confirms and shows the upstream that would be overwritten
+# --force-with-lease refuses the push if the remote has commits your
+# remote-tracking ref does not know about, so you cannot silently flatten
+# someone else's work. --force-if-includes closes the hole in it: a plain
+# lease check passes if you merely FETCHED their commits without integrating
+# them, because the tracking ref then looks current. Together they mean
+# "overwrite only what I have actually seen and built on".
 _confirm_force_push() {
-    local upstream
+    local upstream ans rc
     upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)
-    echo "This will force-push and overwrite history on: ${upstream:-<no upstream configured>}"
-    printf "Proceed with git push --force %s? (y/n) " "$*"
+    echo "Force-push (with lease) to: ${upstream:-<no upstream configured>}"
+    printf "Proceed? (y/n) "
     read -r ans
-    [[ "$ans" == "y" ]] && git push --force "$@"
+    [[ "$ans" == "y" ]] || return 1
+
+    git push --force-with-lease --force-if-includes "$@"
+    rc=$?
+    if (( rc != 0 )); then
+        echo ""
+        echo "If this was rejected as 'stale info', the remote moved since your last"
+        echo "fetch — that is the lease doing its job. Run 'gitf' and look at what"
+        echo "arrived before deciding; re-running with --force would discard it."
+    fi
+    return $rc
 }
 gpf()   { _confirm_force_push "$@"; }
 gitfp() { _confirm_force_push "$@"; }
@@ -423,6 +504,173 @@ grim() {
     else
         git rebase -i --rebase-merges "${target}^"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# Interactive rebase onto main/master, origin, or this branch's own source
+# ---------------------------------------------------------------------------
+
+# Prints this repo's primary branch — main or master, whichever it actually
+# has. origin/HEAD decides when it points at one of the two (it's what the
+# remote itself calls primary — a develop-default repo's origin/HEAD is
+# ignored); otherwise local branches are checked before origin/, or origin/
+# first when called with 'origin'. Returns 1 if neither exists anywhere.
+_git_primary_branch() {
+    local head ns name
+    local -a order=(refs/heads refs/remotes/origin)
+    [[ "$1" == origin ]] && order=(refs/remotes/origin refs/heads)
+    head=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)
+    case "${head#origin/}" in
+        main|master) echo "${head#origin/}"; return 0 ;;
+    esac
+    for ns in "${order[@]}"; do
+        for name in main master; do
+            git show-ref --verify --quiet "$ns/$name" && { echo "$name"; return 0; }
+        done
+    done
+    return 1
+}
+
+# True if <candidate> could be where <branch> was branched from: it resolves
+# to a commit, isn't HEAD or a bare hash (neither names a branch), and isn't
+# <branch> itself or its own copy on a remote — a plain tracking checkout
+# records "Created from origin/<branch>", which says nothing about where the
+# work actually started.
+_git_is_source_candidate() {
+    local branch="$1" cand="$2" remote
+    [[ -z "$cand" || "$cand" == HEAD || "$cand" == "$branch" ]] && return 1
+    [[ "$cand" =~ ^[0-9a-f]{7,40}$ ]] && return 1
+    if [[ -n "$branch" ]]; then
+        for remote in $(git remote 2>/dev/null); do
+            [[ "$cand" == "$remote/$branch" ]] && return 1
+        done
+    fi
+    git rev-parse --verify --quiet "$cand^{commit}" &>/dev/null
+}
+
+# Works out which branch the current one was created from, printing
+# "<source><TAB><how>". In order:
+#   1. the branch's own reflog — its oldest entry is "branch: Created from X"
+#   2. if X was just HEAD (plain `git checkout -b`/`switch -c`), the HEAD
+#      reflog's "checkout: moving from Y to <branch>" at that same commit
+#   3. wt.default-base, then develop, then main/master — first that exists,
+#      locally or on origin/
+# Reflogs expire (90 days by default), so old branches land on step 3.
+_git_branch_source() {
+    local tab=$'\t' branch created_sha from line
+    branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null)
+
+    if [[ -n "$branch" ]]; then
+        line=$(git reflog show --format='%H%x09%gs' "refs/heads/$branch" -- 2>/dev/null | tail -n 1)
+        if [[ "${line#*$tab}" == "branch: Created from "* ]]; then
+            created_sha="${line%%$tab*}"
+            from="${line#*${tab}branch: Created from }"
+            if [[ "$from" == HEAD ]]; then
+                from=""
+                local prefix="${created_sha}${tab}checkout: moving from " suffix=" to $branch"
+                while IFS= read -r line; do
+                    [[ "$line" == "$prefix"*"$suffix" ]] && from="${${line#"$prefix"}%"$suffix"}"
+                done < <(git reflog show --format='%H%x09%gs' HEAD -- 2>/dev/null)
+            fi
+            # Tracking checkouts record the full ref (refs/remotes/origin/x).
+            from="${${from#refs/heads/}#refs/remotes/}"
+            if _git_is_source_candidate "$branch" "$from"; then
+                printf '%s\t%s\n' "$from" "from reflog"; return 0
+            fi
+        fi
+    fi
+
+    local configured name ref
+    configured=$(git config --get wt.default-base 2>/dev/null)
+    for name in "$configured" develop "$(_git_primary_branch)"; do
+        [[ -z "$name" ]] && continue
+        for ref in "$name" "origin/$name"; do
+            if _git_is_source_candidate "$branch" "$ref"; then
+                printf '%s\t%s\n' "$ref" "fallback"; return 0
+            fi
+        done
+    done
+    return 1
+}
+
+# Prints the commit where HEAD forked off <source>. Checks both the local
+# and origin/ copies of the source (whichever exist) and takes the fork point
+# nearest HEAD, so a stale local develop doesn't drag its newer upstream
+# commits into the rebase todo list.
+_git_fork_point() {
+    local src="$1" remote ref mb n best best_n
+    local -a refs=("$src")
+    local matched=""
+    for remote in $(git remote 2>/dev/null); do
+        if [[ "$src" == "$remote/"* ]]; then
+            matched=1
+            git show-ref --verify --quiet "refs/heads/${src#"$remote/"}" && refs+=("${src#"$remote/"}")
+        fi
+    done
+    [[ -z "$matched" ]] && git show-ref --verify --quiet "refs/remotes/origin/$src" && refs+=("origin/$src")
+
+    for ref in "${refs[@]}"; do
+        mb=$(git merge-base HEAD "$ref" 2>/dev/null) || continue
+        n=$(git rev-list --count "$mb..HEAD")
+        if [[ -z "$best" ]] || (( n < best_n )); then best="$mb"; best_n="$n"; fi
+    done
+    [[ -n "$best" ]] && echo "$best"
+}
+
+# Interactive rebase of the current branch onto main/master, whichever this
+# repo has. Always uses origin/<name> when it exists (a local main/master is
+# usually stale); only falls back to the local branch if origin has no copy.
+# No fetch — that's gromi.
+grmi() {
+    git rev-parse --git-dir >/dev/null || return 1
+    local primary target
+    primary=$(_git_primary_branch origin) \
+        || { echo "No main or master branch found (origin/ or local) — try gitf first." >&2; return 1; }
+    target="origin/$primary"
+    if ! git show-ref --verify --quiet "refs/remotes/origin/$primary"; then
+        target="$primary"
+        echo "No 'origin/$primary' — using local '$target'"
+    fi
+    git rebase -i "$target" "$@"
+}
+
+# Fetch origin's main/master (whichever it has) and interactively rebase the
+# current branch onto it.
+gromi() {
+    git rev-parse --git-dir >/dev/null || return 1
+    local primary
+    primary=$(_git_primary_branch origin) \
+        || { echo "No main or master branch found on origin — try gitf first." >&2; return 1; }
+    git fetch origin "$primary" || return 1
+    git rebase -i FETCH_HEAD "$@"
+}
+
+# Interactive rebase of just this branch's own commits, from the point where
+# it left its source branch — the base stays put, so the todo list is exactly
+# the work done on this branch, ready to squash/reword/reorder. The source is
+# worked out automatically (see _git_branch_source) or given as the first
+# argument; anything after that is passed to git rebase.
+grsi() {
+    git rev-parse --git-dir >/dev/null || return 1
+    local tab=$'\t' source how found base count
+    if [[ -n "$1" && "$1" != -* ]]; then
+        source=$(_wt_resolve_primary "$1"); how="given"; shift
+    else
+        found=$(_git_branch_source) \
+            || { echo "Couldn't work out where this branch started — pass it: grsi <source-branch>" >&2; return 1; }
+        source="${found%%$tab*}"; how="${found#*$tab}"
+    fi
+    git rev-parse --verify --quiet "$source^{commit}" &>/dev/null \
+        || { echo "Unknown branch or ref: '$source'" >&2; return 1; }
+    base=$(_git_fork_point "$source") \
+        || { echo "No common history with '$source'." >&2; return 1; }
+    count=$(git rev-list --count "$base..HEAD")
+    if (( count == 0 )); then
+        echo "Nothing to rebase — no commits since this branch left '$source'."
+        return 0
+    fi
+    echo "Source: $source ($how) — $count commit(s) since $(git rev-parse --short "$base")"
+    git rebase -i "$base" "$@"
 }
 
 # Rebase onto a branch found by partial name in the reflog

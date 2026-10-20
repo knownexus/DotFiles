@@ -353,8 +353,8 @@ git:
 - section: Push
   commands:
   - keys: gpf  gitfp  gitpf
-    desc: force-push (confirms first)
-    cmd: git push --force
+    desc: force-push with lease (confirms first; refuses if the remote moved)
+    cmd: git push --force-with-lease --force-if-includes
   - keys: gp1
     desc: push and set upstream tracking
     cmd: git push --set-upstream
@@ -386,12 +386,18 @@ git:
   - keys: grim [n|commit]
     desc: interactive rebase, preserving merge commits
     cmd: rebase -i --rebase-merges
+  - keys: grsi [branch]
+    desc: rewrite only this branch's commits, base unchanged
+    cmd: rebase -i $(merge-base)
   - keys: grd
     desc: rebase current branch onto develop
     cmd: git rebase develop
   - keys: grm
     desc: rebase current branch onto master
     cmd: git rebase master
+  - keys: grmi
+    desc: interactive rebase onto origin/main|master (no fetch)
+    cmd: git rebase -i origin/main|master
   - keys: gro
     desc: sync and rebase onto origin/<current>
     cmd: git fetch + rebase FETCH_HEAD
@@ -401,6 +407,9 @@ git:
   - keys: grod
     desc: sync and rebase onto origin/develop
     cmd: git fetch + rebase FETCH_HEAD
+  - keys: gromi
+    desc: sync and interactive rebase onto origin/main|master
+    cmd: git fetch + rebase -i FETCH_HEAD
   - keys: grof <branch>
     desc: sync and rebase onto named remote branch
     cmd: git fetch + rebase FETCH_HEAD
@@ -427,6 +436,36 @@ git:
   - keys: grev-scan [range]
     desc: scan a commit range for changes later reverted
     cmd: (custom)
+- section: Git workspace UI
+  commands:
+  - keys: gws
+    desc: open the project and worktree checklist from anywhere
+    cmd: workspace UI
+    only: pwsh
+  - keys: gws status [--json] [--root <path>]
+    desc: overview of all registered projects and worktrees
+    cmd: read-only status
+    only: pwsh
+  - keys: gws add <name> <path>
+    desc: register an existing repository as a project
+    cmd: config
+    only: pwsh
+  - keys: gws --demo
+    desc: explore the interface using sample data
+    cmd: read-only sample
+    only: pwsh
+  - keys: gws --snapshot [width height]
+    desc: print the sample layout without opening the UI
+    cmd: read-only sample
+    only: pwsh
+  - keys: gws --config <path>
+    desc: use a different local configuration file
+    cmd: config
+    only: pwsh
+  - keys: gws build / gws test
+    desc: rebuild the app or run isolated Git integration checks
+    cmd: dotnet
+    only: pwsh
 - section: Worktree
   commands:
   - keys: wt-list
@@ -503,7 +542,7 @@ keys:
     cmd: ShowFullPredictionTooltip
     desc: full tooltip for the selected list item
     only: pwsh
-  - keys: Ctrl+Space
+  - keys: Alt+/
     cmd: Switch-PredictionSource
     desc: "cycle the source: History -> SignatureHints -> both (shown in the window title)"
     only: pwsh

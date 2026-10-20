@@ -34,6 +34,96 @@ function global:Assert-GitRepo {
 }
 
 # Status
+# In-progress operation (rebase / merge / cherry-pick / revert / am / bisect).
+#
+# Plain `git status` prints this prominently ("interactive rebase in progress;
+# onto bf25f47"), and gstat replaces git status -- so without it you lose the
+# single most important thing on screen when a rebase stops on a conflict.
+#
+# State lives in files under the git dir; `git rev-parse --git-path` resolves
+# them correctly inside worktrees, where .git is a file rather than a folder.
+function global:Write-GitProgressState {
+    $esc    = [char]27
+    $reset  = "${esc}[0m"
+    $bold   = "${esc}[1m"
+    $yellow = "${esc}[33m"
+    $gray   = "${esc}[90m"
+
+    # Scriptblocks rather than nested functions: a nested `function script:X`
+    # leaks into the session scope and has to be re-declared on every call.
+    $GitPath = {
+        param([string]$name)
+        $v = git rev-parse --git-path $name 2>$null
+        if ($v) { return ([string]$v).Trim() }
+        return $null
+    }
+    $ReadFirst = {
+        param([string]$path)
+        if ($path -and (Test-Path -LiteralPath $path)) {
+            return (Get-Content -LiteralPath $path -TotalCount 1 -ErrorAction SilentlyContinue)
+        }
+        return $null
+    }
+
+    $label = $null; $detail = ''; $hint = ''
+
+    $rm = & $GitPath 'rebase-merge'
+    $ra = & $GitPath 'rebase-apply'
+
+    if ($rm -and (Test-Path $rm -PathType Container)) {
+        $num   = & $ReadFirst (Join-Path $rm 'msgnum')
+        $end   = & $ReadFirst (Join-Path $rm 'end')
+        $head  = & $ReadFirst (Join-Path $rm 'head-name')
+        $onto  = & $ReadFirst (Join-Path $rm 'onto')
+        if ($onto) { $onto = git rev-parse --short=7 $onto 2>$null }
+        $label = if (Test-Path (Join-Path $rm 'interactive')) { 'REBASE -i' } else { 'REBASE' }
+        $branchName = if ($head) { $head -replace '^refs/heads/', '' } else { '' }
+        $detail = "$(if($num){$num}else{'?'})/$(if($end){$end}else{'?'})  onto $onto  ($branchName)"
+        $hint   = 'gitrc = continue   gitra = abort   git rebase --skip'
+    }
+    elseif ($ra -and (Test-Path $ra -PathType Container)) {
+        $num  = & $ReadFirst (Join-Path $ra 'next')
+        $last = & $ReadFirst (Join-Path $ra 'last')
+        $head = & $ReadFirst (Join-Path $ra 'head-name')
+        if (Test-Path (Join-Path $ra 'applying')) {
+            $label = 'AM'
+            $hint  = 'git am --continue   git am --abort'
+        } else {
+            $label = 'REBASE'
+            $hint  = 'gitrc = continue   gitra = abort   git rebase --skip'
+        }
+        $branchName = if ($head) { "  ($($head -replace '^refs/heads/', ''))" } else { '' }
+        $detail = "$(if($num){$num}else{'?'})/$(if($last){$last}else{'?'})$branchName"
+    }
+    elseif ((& $GitPath 'MERGE_HEAD') -and (Test-Path (& $GitPath 'MERGE_HEAD'))) {
+        $label  = 'MERGE'
+        $detail = "merging $(git rev-parse --short=7 MERGE_HEAD 2>$null)"
+        $hint   = 'git merge --continue   git merge --abort'
+    }
+    elseif ((& $GitPath 'CHERRY_PICK_HEAD') -and (Test-Path (& $GitPath 'CHERRY_PICK_HEAD'))) {
+        $label  = 'CHERRY-PICK'
+        $detail = "picking $(git rev-parse --short=7 CHERRY_PICK_HEAD 2>$null)"
+        $hint   = 'git cherry-pick --continue   git cherry-pick --abort'
+    }
+    elseif ((& $GitPath 'REVERT_HEAD') -and (Test-Path (& $GitPath 'REVERT_HEAD'))) {
+        $label  = 'REVERT'
+        $detail = "reverting $(git rev-parse --short=7 REVERT_HEAD 2>$null)"
+        $hint   = 'git revert --continue   git revert --abort'
+    }
+    elseif ((& $GitPath 'BISECT_LOG') -and (Test-Path (& $GitPath 'BISECT_LOG'))) {
+        $label  = 'BISECT'
+        $steps  = @(git bisect log 2>$null | Where-Object { $_ -match '^git bisect (good|bad)' }).Count
+        $detail = "$steps step(s) recorded"
+        $hint   = 'git bisect good / bad   git bisect reset'
+    }
+
+    if (-not $label) { return $false }
+
+    Write-Host "${bold}${yellow}${label}${reset} ${detail}"
+    Write-Host "${gray}        ${hint}${reset}"
+    return $true
+}
+
 function global:gstat {
     if (-not (Assert-GitRepo)) { return }
     $esc    = [char]27
@@ -57,6 +147,7 @@ function global:gstat {
     $behindStr = if ($behind -and [int]$behind.Trim() -gt 0) { " ${red}${dn}$($behind.Trim())${reset}" } else { '' }
 
     Write-Host "${bold}branch:${reset} ${cyan}${branch}${reset} ${gray}${revno}${reset}${aheadStr}${behindStr}"
+    $null = Write-GitProgressState
     Write-Host ''
 
     $lines     = @(git status --porcelain 2>$null)

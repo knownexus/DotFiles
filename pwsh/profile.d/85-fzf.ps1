@@ -13,8 +13,10 @@ if (Get-Module -ListAvailable -Name PSFzf) {
         Remove-PSReadLineKeyHandler -Key Ctrl+r -ErrorAction SilentlyContinue
         Import-Module PSFzf -ErrorAction SilentlyContinue
         Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
-        Write-Host "`nPSFzf loaded — press the key again" -ForegroundColor DarkGray
-        [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
+        # Window title, not Write-Host: printing mid-edit moves the cursor
+        # out from under PSReadLine, and the InvokePrompt redraw that had to
+        # follow left the message stranded below the input line.
+        Set-WindowTitle 'pwsh: PSFzf loaded -- press the key again'
     }
     Set-PSReadLineKeyHandler -Key Ctrl+t -ScriptBlock $script:PSFzfLazyBind
     Set-PSReadLineKeyHandler -Key Ctrl+r -ScriptBlock $script:PSFzfLazyBind

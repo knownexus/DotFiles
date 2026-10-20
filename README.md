@@ -54,3 +54,11 @@ of the git-aliases table, and the two copies of each fix, drifted. Moving the
 actual duplicated *data* into `shared/commands.yaml` removes that class of
 bug at the source, without forcing either shell into an unnatural one-size-
 fits-all implementation.
+
+## Git workspace manager (PowerShell)
+
+`gws` opens a terminal checklist of projects and worktrees from any directory.
+It supports reviewing diffs, batch staging/unstaging and commits, branch/worktree
+management, push, pull, rebase, revert, saved groups and activity results.
+Requires Git and the .NET 10 SDK; the existing profile loader discovers its launcher.
+See [usage and verification](pwsh/GitWorkspace/README.md).

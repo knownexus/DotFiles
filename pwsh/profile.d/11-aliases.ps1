@@ -97,14 +97,13 @@ function global:c { claude }
 Remove-Item -Path Alias:rp -Force -ErrorAction SilentlyContinue
 function global:go-repos { Set-Location 'C:\repos' }
 Set-Alias -Name rp -Value go-repos -Force -Option AllScope
-function global:rpa { Set-Location 'C:\repos\DriveFurtherAPI\develop' }
-function global:rpam { Set-Location 'C:\repos\DriveFurtherAPI\master' }
-function global:rpn { Set-Location 'C:\repos\DriveFurtherNucleus\develop' }
-function global:rpnm { Set-Location 'C:\repos\DriveFurtherNucleus\master' }
-function global:rpc { Set-Location 'C:\repos\CirrusAutomatedTests' }
-function global:rpp { Set-Location $script:RESDIR }
-function global:rpm { Set-Location 'C:\repos\ManagementDashboard' }
-function global:rpnc { Set-Location 'C:\repos\NexusCommunity' }
+function global:rpa { Set-Location 'C:\repos\AccessControl' }
+function global:rpap { Set-Location 'C:\repos\admin_portal' }
+function global:rpd { Set-Location 'C:\repos\DotFiles' }
+function global:rpj { Set-Location 'C:\repos\Joiners' }
+function global:rpm { Set-Location 'C:\repos\mobileApp' }
+function global:rpn { Set-Location 'C:\repos\NexusMD-Mono' }
+function global:rps { Set-Location 'C:\repos\SwimApi' }
 
 # Editor (respects $VISUAL / $EDITOR env vars)
 function global:v {

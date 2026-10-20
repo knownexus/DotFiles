@@ -129,6 +129,8 @@ knowing about explicitly.
 | `wt-gof` *(fzf)* | Fuzzy-pick a worktree and `cd` to it |
 | `gitcf` *(fzf)* | Fuzzy-pick a branch and check it out |
 | `wt-repair [--all [root]]` | Fix stale worktree links — see below |
+| `grmi` / `gromi` | Interactive rebase onto origin/main\|master, as-is / freshly fetched |
+| `grsi [branch]` | Interactive rebase of this branch's own commits — see below |
 
 > **`main` vs `master`** — wherever one of those two is named, whichever
 > the repo actually has is used instead: ask for `main` in a `master`
@@ -137,6 +139,17 @@ knowing about explicitly.
 > bases, `wt-c`, and `wt-default-base`. Local branches are checked before
 > `origin/`, the name you typed wins if both exist, and it's passed
 > through untouched if neither does yet.
+
+> **Interactive rebase shortcuts** — `grmi` rebases onto `origin/main`
+> or `origin/master`, whichever the repo has (the local branch is only
+> used if origin has no copy); `gromi` does the same after a fetch. `grsi
+> [branch]` rewrites just this branch's own commits from where it forked,
+> without moving the base. With no argument it works out the source from
+> the branch's reflog (`Created from X`, or the checkout it was made in),
+> then falls back to `wt.default-base`, `develop`, then main/master. It
+> checks both the local and `origin/` copy of the source and uses the
+> nearer fork point, so a stale local `develop` can't pull extra commits
+> into the todo list. Extra args go to `git rebase` (`grsi --autosquash`).
 
 > **`wt-repair`** fixes the "`prunable gitdir file points to non-existent
 > location`" situation that comes from copying/syncing a `wt-setup`/

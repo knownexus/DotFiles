@@ -44,30 +44,41 @@ function global:Get-GitWorktreeRoot {
 function global:Get-GitWorktreePaths {
     $gitDir = Get-WorktreeGitDir
     if (-not $gitDir) { return @() }
-    $paths   = [System.Collections.Generic.List[string]]::new()
+    $records = @(git --git-dir=$gitDir worktree list --porcelain -z)
+    if ($LASTEXITCODE -ne 0) { return @() }
     $current = $null
-    $isBare  = $false
-    foreach ($line in (git --git-dir=$gitDir worktree list --porcelain)) {
-        if ($line -match '^worktree (.+)$') {
-            $current = $matches[1]
-            $isBare  = $false
-        } elseif ($line -eq 'bare') {
+    $isBare = $false
+    foreach ($field in (($records -join "`n") -split "`0")) {
+        if ($field.StartsWith('worktree ')) {
+            $current = $field.Substring(9)
+            $isBare = $false
+        } elseif ($field -eq 'bare') {
             $isBare = $true
-        } elseif ($line -eq '') {
-            if ($current -and -not $isBare) { $paths.Add($current) }
+        } elseif ($field -eq '') {
+            if ($current -and -not $isBare) { $current }
             $current = $null
         }
     }
-    if ($current -and -not $isBare) { $paths.Add($current) }
-    return $paths
+    if ($current -and -not $isBare) { $current }
+}
+
+# Prefer an exact path/name and refuse ambiguous fragments.
+function global:Resolve-GitWorktreePath {
+    param([Parameter(Mandatory)][string]$Name)
+    $paths = @(Get-GitWorktreePaths)
+    $exact = @($paths | Where-Object { $_ -eq $Name -or (Split-Path $_ -Leaf) -eq $Name })
+    if ($exact.Count -eq 1) { return $exact[0] }
+    $candidates = if ($exact.Count -gt 1) { $exact } else {
+        @($paths | Where-Object { $_.IndexOf($Name, [StringComparison]::OrdinalIgnoreCase) -ge 0 })
+    }
+    if (@($candidates).Count -eq 1) { return @($candidates)[0] }
+    if (@($candidates).Count -gt 1) { throw "Ambiguous worktree '$Name'. Use its full path: $($candidates -join ', ')" }
+    throw "No worktree matching '$Name'."
 }
 
 function global:wt-go {
     param([Parameter(Mandatory)][string]$Name)
-    $match = Get-GitWorktreePaths |
-        Where-Object { $_ -like "*$Name*" } |
-        Select-Object -First 1
-    if ($match) { Set-Location $match } else { Write-Host "No worktree matching '$Name'" }
+    Set-Location -LiteralPath (Resolve-GitWorktreePath $Name)
 }
 
 function global:wt-list {
@@ -185,27 +196,23 @@ function global:wt-c {
 # Remove a worktree and delete its local branch
 function global:wt-done {
     param([Parameter(Mandatory)][string]$Name)
-    $match = Get-GitWorktreePaths |
-        Where-Object { $_ -like "*$Name*" } |
-        Select-Object -First 1
-    if (-not $match) { Write-Host "No worktree matching '$Name'"; return }
+    $match = Resolve-GitWorktreePath $Name
     $gitDir = Get-WorktreeGitDir
     if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
     $branch = git -C $match branch --show-current
     git --git-dir=$gitDir worktree remove $match
+    if ($LASTEXITCODE -ne 0) { return }
     if ($branch) { git --git-dir=$gitDir branch -d $branch }
 }
 
 function global:wt-done-f {
     param([Parameter(Mandatory)][string]$Name)
-    $match = Get-GitWorktreePaths |
-        Where-Object { $_ -like "*$Name*" } |
-        Select-Object -First 1
-    if (-not $match) { Write-Host "No worktree matching '$Name'"; return }
+    $match = Resolve-GitWorktreePath $Name
     $gitDir = Get-WorktreeGitDir
     if (-not $gitDir) { Write-Host "Not a git repo or worktree workspace root."; return }
     $branch = git -C $match branch --show-current
     git --git-dir=$gitDir worktree remove --force $match
+    if ($LASTEXITCODE -ne 0) { return }
     if ($branch) { git --git-dir=$gitDir branch -D $branch }
 }
 

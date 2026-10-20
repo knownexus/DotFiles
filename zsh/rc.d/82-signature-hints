@@ -111,6 +111,7 @@ _SIGHINT_SIGS=(
     # Git — rebase
     gri             "[target|HEAD~N]"
     grim            "[target|HEAD~N]"
+    grsi            "[source-branch]"
     rebaseon        "<branch-fragment>"
     rebase          "<branch-fragment>"
     grof            "<branch>"
@@ -161,7 +162,7 @@ _SIGHINT_ALL_COMMANDS=(
     gitf gitpl update updated
     gpf gitfp gitpf gp1 pushdr pushdr-f
     gru grpo giturl gitremote-reset remote!
-    gri grim grd grm gro groi grod grof rebaseon rebase gitra gitrc groot
+    gri grim grsi grd grm grmi gro groi grod gromi grof rebaseon rebase gitra gitrc groot
     grev grev-clean grev-scan
     wt-go wt-list wt-feature wt-fix wt-c wt-done wt-done-f wt! wt-prune wt-repair wt-setup wt-init wt-workspace wt-default-base fix-fetch-refspecs
     copy cheat aliases gitaliases allaliases keys keybindings repos-status trash-restore trash-empty remspace_dir wt-gof gitcf z zsh-doctor view

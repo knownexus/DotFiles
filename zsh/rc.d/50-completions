@@ -89,5 +89,6 @@ compdef _all_branches   gitc
 compdef _local_branches gitb
 compdef _local_branches gri
 compdef _local_branches grim
+compdef _all_branches   grsi
 compdef _remote_branches pushdr
 compdef _remote_branches pushdr-f
