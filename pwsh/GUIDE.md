@@ -164,6 +164,8 @@ Added since:
 | `Alt+/` | Cycle the prediction source — see sig-predictor below |
 | `Alt+H` | Parameter help for the command on the line |
 | `Tab` / `Shift+Tab` | Complete, or open the arrow-key-navigable menu |
+| `cd ` + `Tab` | Folder browser, one level at a time (below) |
+| `cd path\` + `Shift+Tab` | Drop the last folder off the path |
 | `Ctrl+D` | Delete the char under the cursor; exit when the line is empty |
 | `Ctrl+R` / `Ctrl+T` *(PSFzf)* | Fuzzy history / file-insert |
 
@@ -171,7 +173,28 @@ Added since:
 > press `↑` to cycle just `git ...` history, not the full unfiltered
 > list. `F2`, `F4` and the arrow-key accept are PSReadLine's own
 > bindings; the rest are set in `81-key-bindings.ps1` /
-> `50-completions.ps1`.
+> `50-completions.ps1` / `51-cd-browser.ps1`.
+
+### cd folder browser
+
+`Tab` on a `cd` / `pushd` line opens a one-column list of the folders at
+the path typed so far (folders only, no files), and the command line
+follows along as you move:
+
+| Key | Action |
+|---|---|
+| `↑` / `↓`, `PgUp` / `PgDn` | Move the highlight |
+| `→` | Go into the highlighted folder |
+| `←` (or `Backspace` with no filter) | Go up a level |
+| typing | Filter the current level by prefix (`.` shows dot-folders) |
+| `Enter` / `Tab` | Put the highlighted folder on the line and close |
+| `Esc` / `Ctrl+C` | Close and put the line back as it was |
+
+The top row below the starting level is `.` (this folder), so `→` then
+`Enter` picks the folder you just went into. A half-typed name with only
+one match goes straight in. Every other line keeps plain `MenuComplete`
+on Tab — its menu reads its own keys, so `←`/`→` can't be repurposed
+there, hence a separate browser.
 
 > This table is also live in-shell: run `keys` (or `keybindings`) for
 > just it, or `cheat` for everything.

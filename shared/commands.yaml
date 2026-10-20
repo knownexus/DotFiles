@@ -568,6 +568,12 @@ keys:
     cmd: menu-complete
     desc: enter the arrow-key-navigable completion menu
     only: zsh
+  - keys: cd <Tab>
+    cmd: (custom)
+    desc: "folder browser: ↑↓ move, → into, ← up, type to filter, Enter pick, Esc cancel"
+  - keys: cd path <Shift+Tab>
+    cmd: (custom)
+    desc: drop the last folder off the path
 - section: Line editing
   commands:
   - keys: Ctrl+←  Ctrl+→

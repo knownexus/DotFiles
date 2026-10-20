@@ -1,0 +1,292 @@
+# -*- sh -*-
+# cd folder browser — mirrors pwsh 51-cd-browser.ps1
+#
+# Tab on a `cd`/`pushd` line opens a one-column folder browser under the
+# prompt instead of the usual completion list. It lists directories only,
+# one level at a time, and the command line follows along as you move:
+#
+#   Up/Down      move the highlight
+#   Right        go into the highlighted folder
+#   Left         go up a level (Backspace too, once the filter is empty)
+#   typing       filter the current level by prefix
+#   Enter / Tab  put the highlighted folder on the line and close
+#   Esc          close and put the line back the way it was
+#
+# The top row of every level below the start is "." (this folder), so →
+# then Enter picks the folder you just went into.
+#
+# Shift+Tab on a cd line (no browser open) drops the last folder off the
+# path. Every other line keeps whatever Tab / Shift+Tab did before.
+#
+# The menuselect keymap can't be used for this: it's shared by every
+# completion, so taking ←/→ there would break the grid menus elsewhere.
+# The list is drawn in POSTDISPLAY; 82-signature-hints leaves it alone while
+# _CDB_ACTIVE is set. Loaded after 83-fzf so the Tab fallback below picks up
+# fzf-completion when fzf's completion.zsh is in use.
+
+typeset -gi _CDB_ACTIVE=0
+typeset -gi _CDB_MAX_ROWS=15
+
+# What Tab / Shift+Tab were bound to before this file (kept on re-source).
+() {
+    local tab=${${(z)"$(bindkey '^I')"}[2]} stab=${${(z)"$(bindkey '^[[Z')"}[2]}
+    [[ $tab  == (|undefined-key) ]] && tab=expand-or-complete
+    [[ $stab == (|undefined-key) ]] && stab=menu-complete
+    [[ $tab  == _cdb_tab       ]] || typeset -g _CDB_TAB_FALLBACK=$tab
+    [[ $stab == _cdb_shift_tab ]] || typeset -g _CDB_STAB_FALLBACK=$stab
+}
+
+# Sets _cdb_start (chars before the argument) and _cdb_raw (the argument as
+# typed) for a plain `cd [path]` line with the cursor at the end.
+_cdb_target() {
+    [[ -z $RBUFFER ]] || return 1
+    local -a words
+    words=(${(z)LBUFFER})
+    [[ ${words[1]} == (cd|pushd) ]] || return 1
+    if (( $#words == 1 )); then
+        [[ $LBUFFER == *[[:space:]] ]] || return 1
+        _cdb_start=$#LBUFFER _cdb_raw=''
+        return 0
+    fi
+    (( $#words == 2 )) && [[ $LBUFFER != *[[:space:]] && ${words[2]} != -* ]] || return 1
+    _cdb_raw=${words[2]}
+    _cdb_start=$(( $#LBUFFER - $#_cdb_raw ))
+}
+
+# Split the unquoted argument into the folder part (kept as typed, so the
+# line stays readable) and the partial name being filtered on.
+_cdb_split() {
+    local t=$1
+    [[ $t == (\~|..) ]] && t+=/
+    if [[ $t == */* ]]; then
+        _cdb_prefix=${t%/*}/ _cdb_filter=${t##*/}
+    else
+        _cdb_prefix='' _cdb_filter=$t
+    fi
+}
+
+# REPLY = absolute path for a folder prefix ('' is $PWD); 1 if not a folder.
+_cdb_resolve() {
+    local p=$1
+    [[ $p == \~(|/*) ]] && p=$HOME${p#\~}
+    [[ $p == /* ]] || p=$PWD/$p
+    p=${p:a}
+    [[ -d $p ]] || return 1
+    REPLY=$p
+}
+
+# REPLY = the prefix one level up; 1 at /. Relative prefixes stay relative
+# (repos/dots/ -> repos/, '' -> ../); ~/ and the like go absolute.
+_cdb_parent() {
+    local prefix=$1 dir trim last
+    _cdb_resolve $prefix || return 1
+    dir=$REPLY
+    [[ $dir == / ]] && return 1
+    trim=${prefix%/}
+    if [[ -z $trim ]]; then REPLY=../; return 0; fi
+    last=${trim:t}
+    if [[ $last == .. ]]; then REPLY=$prefix../; return 0; fi
+    if [[ $last != (.|\~) ]]; then
+        if [[ $trim == */* ]]; then REPLY=${trim%/*}/; else REPLY=''; fi
+        return 0
+    fi
+    REPLY=${dir:h}
+    [[ $REPLY == / ]] || REPLY+=/
+}
+
+# reply = folder names in $1 starting with $2 (case-insensitive). Dot-folders
+# only show once the filter itself starts with a dot.
+_cdb_list() {
+    setopt localoptions extendedglob nullglob
+    local dir=$1 filter=$2
+    local -a names
+    if [[ $filter == .* ]]; then names=($dir/*(D-/:t)); else names=($dir/*(-/:t)); fi
+    reply=(${(M)names:#(#i)${(b)filter}*})
+}
+
+# REPLY = $1 quoted for the command line. A leading ~ stays bare so it expands.
+_cdb_quote() {
+    local p=$1 lead=''
+    [[ $p == \~(|/*) ]] && lead='~' p=${p#\~}
+    [[ -n $p ]] && p=${(q-)p}
+    REPLY=$lead$p
+}
+
+_cdb_set_arg() {
+    _cdb_quote $1
+    BUFFER=${BUFFER[1,_cdb_start]}$REPLY
+    CURSOR=$#BUFFER
+}
+
+# REPLY = one of up down left right pgup pgdn home end enter tab esc bs
+# char:<c> other. Escape sequences are told apart from a bare Esc by timing.
+_cdb_readkey() {
+    local k c seq=''
+    read -rk 1 k || { REPLY=esc; return }
+    case $k in
+        $'\e')
+            if ! read -rk 1 -t 0.05 c; then REPLY=esc; return; fi
+            # Esc then a fast keypress: close, and hand the key back to zle.
+            if [[ $c != ('['|O) ]]; then zle -U -- "$c"; REPLY=esc; return; fi
+            while read -rk 1 -t 0.05 c; do
+                seq+=$c
+                [[ $c == [A-Za-z~] ]] && break
+            done
+            case $seq in
+                A) REPLY=up ;;    B) REPLY=down ;;
+                C) REPLY=right ;; D|Z) REPLY=left ;;
+                H|1~) REPLY=home ;; F|4~) REPLY=end ;;
+                5~) REPLY=pgup ;; 6~) REPLY=pgdn ;;
+                *) REPLY=other ;;
+            esac ;;
+        $'\r'|$'\n') REPLY=enter ;;
+        $'\t')       REPLY=tab ;;
+        $'\x7f'|$'\b') REPLY=bs ;;
+        $'\x03'|$'\x07') REPLY=esc ;;
+        [[:cntrl:]]) REPLY=other ;;
+        *) REPLY=char:$k ;;
+    esac
+}
+
+# The browser's helpers below read and set _cdb_tab's locals (zsh scoping is
+# dynamic): prefix filter dir items sel top rows.
+
+_cdb_load() {
+    _cdb_resolve $prefix && dir=$REPLY
+    _cdb_list $dir $filter
+    items=()
+    [[ -n $prefix && -z $filter ]] && items=(.)
+    items+=("${reply[@]}")
+    sel=1 top=1
+    if [[ -n $1 ]]; then
+        local i=${items[(ie)$1]}
+        (( i <= $#items )) && sel=$i
+    fi
+    _cdb_set_arg $prefix$filter
+}
+
+_cdb_go_up() {
+    local child=${dir:t}
+    _cdb_parent $prefix || return
+    prefix=$REPLY filter=''
+    _cdb_load $child
+}
+
+# Append a line to _cdb_draw's POSTDISPLAY text, with its own highlight.
+_cdb_add() {
+    line=${1[1,width]}
+    text+=$'\n'
+    hl+=("$(( $#BUFFER + $#text )) $(( $#BUFFER + $#text + $#line )) $2")
+    text+=$line
+}
+
+_cdb_draw() {
+    (( sel < top )) && top=$sel
+    (( sel >= top + rows )) && top=$(( sel - rows + 1 ))
+    local width=$(( COLUMNS - 1 )) text='' line spec
+    local -a hl
+    local -i n i more
+    line=$dir
+    [[ $dir == $HOME(|/*) ]] && line=\~${dir#$HOME}
+    [[ -n $filter ]] && line+="  [$filter]"
+    (( top > 1 )) && line+="  ↑$(( top - 1 )) more"
+    # Long paths lose their start rather than the folder you're in.
+    (( $#line > width )) && line=…${line[-(width - 1),-1]}
+    _cdb_add "$line" fg=8
+    if (( $#items == 0 )); then
+        _cdb_add "  (no ${${filter:+matches}:-subfolders})" fg=8
+    fi
+    for (( i = 0; i < rows; i++ )); do
+        n=$(( top + i ))
+        (( n > $#items )) && break
+        if [[ ${items[n]} == . ]]; then line='  .  (this folder)'; else line="  ${items[n]}/"; fi
+        if (( n == sel )); then spec=standout; else spec=fg=blue,bold; fi
+        _cdb_add "$line" $spec
+    done
+    more=$(( $#items - (top + rows - 1) ))
+    line='↑↓ move  → open  ← up  Enter pick  Esc cancel'
+    (( more > 0 )) && line="↓$more more   $line"
+    _cdb_add "$line" fg=8
+    POSTDISPLAY=$text
+    region_highlight=("${hl[@]}")
+    zle -R
+}
+
+_cdb_tab() {
+    local _cdb_start _cdb_raw _cdb_prefix _cdb_filter
+    if ! _cdb_target; then zle $_CDB_TAB_FALLBACK; return; fi
+    _cdb_split ${(Q)_cdb_raw}
+    # final stays the original argument unless something is picked, so Esc,
+    # Ctrl+C and errors all put the line back.
+    local prefix=$_cdb_prefix filter=$_cdb_filter dir final=$_cdb_raw key pick c
+    if ! _cdb_resolve $prefix; then zle $_CDB_TAB_FALLBACK; return; fi
+    local -a items
+    local -i sel=1 top=1 rows=$(( LINES - 5 ))
+    (( rows > _CDB_MAX_ROWS )) && rows=$_CDB_MAX_ROWS
+    (( rows < 3 )) && rows=3
+
+    _CDB_ACTIVE=1
+    {
+        _cdb_load
+        # A partial name with exactly one match goes straight in, like plain Tab would.
+        if [[ -n $filter ]] && (( $#items == 1 )); then
+            prefix+=${items[1]}/ filter=''
+            _cdb_load
+        fi
+        while true; do
+            _cdb_draw
+            _cdb_readkey
+            key=$REPLY pick=${items[sel]}
+            case $key in
+                up)    (( sel > 1 )) && (( sel-- )) ;;
+                down)  (( sel < $#items )) && (( sel++ )) ;;
+                pgup)  (( sel = sel > rows ? sel - rows : 1 )) ;;
+                pgdn)  (( sel = sel + rows < $#items ? sel + rows : $#items )); (( sel < 1 )) && sel=1 ;;
+                home)  sel=1 ;;
+                end)   (( sel = $#items > 0 ? $#items : 1 )) ;;
+                right) [[ -n $pick && $pick != . ]] && { prefix+=$pick/ filter=''; _cdb_load } ;;
+                left)  _cdb_go_up ;;
+                bs)    if [[ -n $filter ]]; then filter=${filter[1,-2]}; _cdb_load; else _cdb_go_up; fi ;;
+                enter|tab)
+                    if [[ -z $pick ]]; then final=$prefix$filter
+                    elif [[ $pick == . ]]; then final=$prefix
+                    else final=$prefix$pick/
+                    fi
+                    _cdb_quote $final; final=$REPLY
+                    break ;;
+                esc)   break ;;
+                char:*)
+                    c=${key#char:}
+                    if [[ $c == / ]]; then
+                        [[ -n $filter && -n $pick && $pick != . ]] && { prefix+=$pick/ filter=''; _cdb_load }
+                    else
+                        filter+=$c; _cdb_load
+                    fi ;;
+            esac
+        done
+    } always {
+        _CDB_ACTIVE=0
+        POSTDISPLAY=''
+        region_highlight=()
+        BUFFER=${BUFFER[1,_cdb_start]}$final
+        CURSOR=$#BUFFER
+    }
+}
+
+_cdb_shift_tab() {
+    local _cdb_start _cdb_raw _cdb_prefix _cdb_filter
+    if ! _cdb_target; then zle $_CDB_STAB_FALLBACK; return; fi
+    _cdb_split ${(Q)_cdb_raw}
+    # A half-typed name goes first; after that each press is one level up.
+    if [[ -n $_cdb_filter ]]; then
+        REPLY=$_cdb_prefix
+    else
+        _cdb_parent $_cdb_prefix || return 0
+    fi
+    _cdb_set_arg $REPLY
+}
+
+zle -N _cdb_tab
+zle -N _cdb_shift_tab
+bindkey '^I'   _cdb_tab
+bindkey '^[[Z' _cdb_shift_tab

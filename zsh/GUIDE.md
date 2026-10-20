@@ -180,6 +180,8 @@ There are ~90 git aliases in total — run `gitaliases` for the full list.
 | `Alt+H` | Jump to the man page for the command on the line |
 | `Tab` | Complete the current word (no auto-menu) |
 | `Shift+Tab` | Enter the arrow-key-navigable completion menu |
+| `cd ` + `Tab` | Folder browser, one level at a time (below) |
+| `cd path/` + `Shift+Tab` | Drop the last folder off the path |
 | `Ctrl+D` | Delete the char under the cursor; else `popd`; else exit |
 | `Ctrl+R` / `Ctrl+T` / `Alt+C` *(fzf)* | Fuzzy history / file-insert / cd |
 
@@ -189,6 +191,30 @@ There are ~90 git aliases in total — run `gitaliases` for the full list.
 
 > This table is also live in-shell: run `keys` (or `keybindings`) for
 > just it, or `cheat` for everything.
+
+### cd folder browser
+
+`Tab` on a `cd` / `pushd` line opens a one-column list of the folders at
+the path typed so far (folders only, no files), and the command line
+follows along as you move:
+
+| Key | Action |
+|---|---|
+| `↑` / `↓`, `PgUp` / `PgDn` | Move the highlight |
+| `→` | Go into the highlighted folder |
+| `←` (or `Backspace` with no filter) | Go up a level |
+| typing | Filter the current level by prefix (`.` shows dot-folders) |
+| `Enter` / `Tab` | Put the highlighted folder on the line and close |
+| `Esc` / `Ctrl+C` | Close and put the line back as it was |
+
+The top row below the starting level is `.` (this folder), so `→` then
+`Enter` picks the folder you just went into. A half-typed name with only
+one match goes straight in, and `cd -<Tab>` still offers the directory
+stack. It lives in `rc.d/88-cd-browser`, after `83-fzf`, so every other
+line falls through to whatever Tab was bound to (`fzf-completion` when
+fzf's completion script is loaded). It doesn't use the `menuselect`
+keymap: that's shared by every completion menu, so taking `←`/`→` there
+would break the grid menus elsewhere.
 
 ## Optional tool integrations (gated on being installed)
 

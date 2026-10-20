@@ -211,6 +211,7 @@ _sighint_compute() {
 typeset -g _SIGHINT_HL_COUNT=0
 
 _sighint_update() {
+    (( ${_CDB_ACTIVE:-0} )) && return   # the cd browser (88-cd-browser) owns POSTDISPLAY
     (( _SIGHINT_HL_COUNT > 0 )) && region_highlight[-${_SIGHINT_HL_COUNT},-1]=()
     _SIGHINT_HL_COUNT=0
 

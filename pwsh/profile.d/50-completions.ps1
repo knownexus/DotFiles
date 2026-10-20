@@ -4,7 +4,9 @@
 # list (fast) rather than re-scanning disk with -ListAvailable.
 if (Get-Module -Name PSReadLine) {
 
-    # Menu-style completion (mirrors zsh list-suffixes / group completion)
+    # Menu-style completion (mirrors zsh list-suffixes / group completion).
+    # 51-cd-browser.ps1 rebinds both keys to run the folder browser on cd lines
+    # and call MenuComplete everywhere else.
     Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
     Set-PSReadLineKeyHandler -Key Shift+Tab -Function MenuComplete
 
