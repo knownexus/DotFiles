@@ -3,7 +3,8 @@
 # from a .envrc file).
 $direnvExe = (Get-Command direnv -CommandType Application -ErrorAction SilentlyContinue |
     Select-Object -First 1).Source
-if ($direnvExe) {
+# The hook throws below PowerShell 7.2, so Windows PowerShell 5.1 skips it.
+if ($direnvExe -and ($PSVersionTable.PSVersion -ge [version]'7.2')) {
     # `direnv hook` output is static per direnv.exe — spawning it on every
     # launch costs ~90ms for no benefit, so cache the generated script and
     # only regenerate when the exe itself changes.
