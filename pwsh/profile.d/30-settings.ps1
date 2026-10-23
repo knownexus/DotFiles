@@ -4,8 +4,13 @@
 # desktop notification in 40-prompt.ps1 (mirrors REPORTTIME).
 $global:ReportTime = 10
 
-if (Get-Module -ListAvailable -Name PSReadLine -ErrorAction SilentlyContinue) {
+# pwsh imports PSReadLine itself before running the profile in an interactive
+# session, so check the loaded-module list first -- Get-Module -ListAvailable
+# scans every folder on PSModulePath and cost 300ms+ per launch.
+if (-not (Get-Module -Name PSReadLine)) {
     Import-Module PSReadLine -ErrorAction SilentlyContinue
+}
+if (Get-Module -Name PSReadLine) {
 
     # The prompt (40-prompt.ps1) writes one line of its own -- the right-aligned
     # path + VCS info -- before returning the "$ " line that PSReadLine edits.

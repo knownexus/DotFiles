@@ -1,6 +1,6 @@
 # Workspace Git UI. Loading the profile only defines functions; builds and scans
 # happen on demand. This deliberately does not shadow git or change $PWD.
-$script:GwsSource = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\GitWorkspace'))
+$script:GwsSource = [System.IO.Path]::GetFullPath((Join-Path $script:RESDIR 'GitWorkspace'))
 
 function global:Get-GitWorkspaceBuildDirectory {
     param([switch]$Tests)

@@ -17,7 +17,7 @@ if (-not $env:HOME)          { $env:HOME = $env:USERPROFILE }
 # ships, reads the source format directly), so editing shared/less/lesskey
 # takes effect on the next pager with nothing to redeploy.
 # ---------------------------------------------------------------------------
-$lessKey = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'shared\less\lesskey'
+$lessKey = Join-Path $script:SHAREDDIR 'less\lesskey'
 if (Test-Path $lessKey) { $env:LESSKEYIN = $lessKey }
 if (-not $env:LESS)     { $env:LESS = '-R -i -j4 --incsearch' }
 

@@ -1,7 +1,7 @@
 # PSFzf integration — inert until the PSFzf module is installed. Mirrors
 # the zsh side's fzf integration (Ctrl+T/Ctrl+R bindings, wt-gof, gitcf).
 #   Install-Module PSFzf -Scope CurrentUser
-if (Get-Module -ListAvailable -Name PSFzf) {
+if (Test-ModuleInstalled PSFzf) {
 
     # Importing PSFzf costs ~300ms, so defer it until Ctrl+T/Ctrl+R is actually
     # pressed instead of paying that on every launch. The placeholder handler

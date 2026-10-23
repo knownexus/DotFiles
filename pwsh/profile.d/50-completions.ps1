@@ -124,7 +124,7 @@ function global:build-predictor {
 # defer it until the first git completion attempt instead of every launch.
 # Importing it registers its own native completer for `git`, which replaces
 # this stub — so results only appear from the second Tab press onward.
-if (Get-Module -ListAvailable -Name posh-git -ErrorAction SilentlyContinue) {
+if (Test-ModuleInstalled posh-git) {
     Register-ArgumentCompleter -CommandName git -Native -ScriptBlock {
         param($wordToComplete, $commandAst, $cursorPosition)
         Import-Module posh-git
