@@ -51,12 +51,22 @@ if (Get-Module -Name PSReadLine) {
             -not ([System.Management.Automation.PSTypeName]'SignatureHintPredictor').Type) {
             try {
                 # Shadow-copy so the build output is never locked by a running PS session.
-                # Include the PID so concurrent sessions each get their own copy.
-                $tmpDll = [System.IO.Path]::Combine(
-                    [System.IO.Path]::GetTempPath(),
-                    "SignatureHintPredictor_$([System.Diagnostics.Process]::GetCurrentProcess().Id).dll"
-                )
-                Copy-Item $sigDll $tmpDll -Force -ErrorAction Stop
+                # Name the copy after the build's timestamp, so it's only copied
+                # after a rebuild and every session shares it -- a loaded DLL can
+                # still be read and loaded by other processes, just not overwritten.
+                # (One copy per PID used to cost ~30ms a launch and was never cleaned up.)
+                $tmpDir = [System.IO.Path]::GetTempPath()
+                $tmpDll = Join-Path $tmpDir "SignatureHintPredictor_$([System.IO.File]::GetLastWriteTimeUtc($sigDll).Ticks).dll"
+                if (-not [System.IO.File]::Exists($tmpDll)) {
+                    # Another session starting at the same moment may win the race;
+                    # its copy is identical, so a failed copy is fine if the file exists.
+                    try { Copy-Item $sigDll $tmpDll -ErrorAction Stop }
+                    catch { if (-not [System.IO.File]::Exists($tmpDll)) { throw } }
+                    # Older builds' copies: delete any no session still has loaded.
+                    Get-ChildItem $tmpDir -Filter 'SignatureHintPredictor_*.dll' |
+                        Where-Object FullName -ne $tmpDll |
+                        Remove-Item -ErrorAction SilentlyContinue
+                }
                 Add-Type -Path $tmpDll -ErrorAction Stop
                 [System.Management.Automation.Subsystem.SubsystemManager]::RegisterSubsystem(
                     [System.Management.Automation.Subsystem.SubsystemKind]::CommandPredictor,

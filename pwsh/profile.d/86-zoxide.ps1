@@ -3,11 +3,12 @@
 # directory). zoxide's own init script hooks in via Set-Location/
 # Push-Location/Pop-Location, not by touching `prompt`, so it coexists
 # cleanly with the custom prompt in 40-prompt.ps1.
-if (Get-Command zoxide -ErrorAction SilentlyContinue) {
+$zoxideExe = (Get-Command zoxide -CommandType Application -ErrorAction SilentlyContinue |
+    Select-Object -First 1).Source
+if ($zoxideExe) {
     # `zoxide init` output is static per zoxide.exe — spawning it on every
     # launch costs ~100ms for no benefit, so cache the generated script and
     # only regenerate when the exe itself changes.
-    $zoxideExe   = (Get-Command zoxide).Source
     $cacheFile   = Join-Path $env:TEMP 'zoxide-init-pwsh.ps1'
     $exeStamp    = (Get-Item $zoxideExe).LastWriteTimeUtc.Ticks
     $stampFile   = "$cacheFile.stamp"
