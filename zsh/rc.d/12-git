@@ -226,9 +226,30 @@ gdf1() { git diff HEAD~1 --color=always "$@" | less -R; }
 unalias gitb 2>/dev/null
 gitb() {
     if (( $# )); then git branch "$@"; return; fi
-    # Tab before the subject so awk can trim it at the first ':' without touching the time
-    git branch --color=always --sort=-committerdate --format='%(HEAD) %(color:green)%(align:30)%(refname:short)%(end)%(color:reset) %(color:yellow)%(committerdate:format:%Y-%m-%d %H:%M)%(color:reset) %(color:blue)%(objectname:short)%(color:reset)%09%(contents:subject)' |
-        awk -F'\t' '{ s = $2; sub(/:.*/, "", s); print $1 " " s }'
+    # Tab-separated fields; awk trims the subject at its first ':', sizes the name column to the
+    # longest name (shrinking, min 10, to leave room for date, hash and some subject; longer names
+    # overflow it, cut with '…' only if date and hash would no longer fit) and cuts subjects at
+    # the window edge so nothing wraps
+    git branch --sort=-committerdate --format='%(HEAD)%09%(refname:short)%09%(committerdate:format:%Y-%m-%d %H:%M)%09%(objectname:short)%09%(contents:subject)' |
+        awk -F'\t' -v cols="${COLUMNS:-120}" '
+            { n++; head[n] = $1; name[n] = $2; date[n] = $3; hash[n] = $4; s = $5; sub(/:.*/, "", s); subj[n] = s
+              if (length($2) > maxName) maxName = length($2)
+              if (length($4) > maxHash) maxHash = length($4)
+              if (length(s) > maxSubj) maxSubj = length(s) }
+            END {
+                fixed = 2 + 1 + 16 + 1 + maxHash + 1
+                w = cols - 1 - fixed - (maxSubj < 12 ? maxSubj : 12); if (w < 10) w = 10
+                if (w > maxName) w = maxName
+                fit = cols - 1 - fixed; if (fit < 10) fit = 10
+                for (i = 1; i <= n; i++) {
+                    if (length(name[i]) > fit) name[i] = substr(name[i], 1, fit - 1) "…"
+                    nw = length(name[i]) > w ? length(name[i]) : w
+                    avail = cols - 1 - (2 + nw + 1 + 16 + 1 + length(hash[i]) + 1)
+                    s = subj[i]
+                    if (length(s) > avail) s = avail > 1 ? substr(s, 1, avail - 1) "…" : ""
+                    printf "%s \033[32m%-*s\033[m \033[33m%s\033[m \033[34m%s\033[m %s\n", head[i], w, name[i], date[i], hash[i], s
+                }
+            }'
 }
 alias gitc='git checkout'
 alias gitcb='git checkout -b'

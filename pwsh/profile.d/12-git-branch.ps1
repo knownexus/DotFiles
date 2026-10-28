@@ -3,12 +3,35 @@
 # Branch — bare gitb lists each branch (newest first) with its last commit date and head; args pass through
 function global:gitb {
     if ($args.Count -gt 0) { git branch @args; return }
-    # Tab before the subject so it can be trimmed at the first ':' without touching the time
-    git branch --color=always --sort=-committerdate --format='%(HEAD) %(color:green)%(align:30)%(refname:short)%(end)%(color:reset) %(color:yellow)%(committerdate:format:%Y-%m-%d %H:%M)%(color:reset) %(color:blue)%(objectname:short)%(color:reset)%09%(contents:subject)' |
+    # Tab-separated fields; the subject is trimmed at its first ':'
+    $rows = @(git branch --sort=-committerdate --format='%(HEAD)%09%(refname:short)%09%(committerdate:format:%Y-%m-%d %H:%M)%09%(objectname:short)%09%(contents:subject)' |
         ForEach-Object {
-            $line, $subject = $_ -split "`t", 2
-            "$line $(($subject -split ':', 2)[0])"
-        }
+            $f = $_ -split "`t", 5
+            [pscustomobject]@{ Head = $f[0]; Name = $f[1]; Date = $f[2]; Hash = $f[3]; Subject = "$(($f[4] -split ':', 2)[0])" }
+        })
+    if (-not $rows) { return }
+
+    $cols = try { $Host.UI.RawUI.WindowSize.Width } catch { 0 }
+    if ($cols -le 0) { $cols = 120 }
+    $maxName = ($rows.Name    | Measure-Object -Property Length -Maximum).Maximum
+    $maxHash = ($rows.Hash    | Measure-Object -Property Length -Maximum).Maximum
+    $maxSubj = ($rows.Subject | Measure-Object -Property Length -Maximum).Maximum
+    # Name column fits the longest name, shrinking (min 10) to leave room for date, hash and some subject;
+    # longer names overflow it (cut with '…' only if date and hash would no longer fit), and subjects
+    # are cut at the window edge so nothing wraps
+    $fixed = 2 + 1 + 16 + 1 + $maxHash + 1
+    $nameW = [Math]::Min($maxName, [Math]::Max(10, $cols - 1 - $fixed - [Math]::Min($maxSubj, 12)))
+    $fit   = [Math]::Max(10, $cols - 1 - $fixed)
+    $e = [char]27
+    foreach ($r in $rows) {
+        $name  = $r.Name
+        if ($name.Length -gt $fit) { $name = $name.Substring(0, $fit - 1) + '…' }
+        $name  = $name.PadRight($nameW)
+        $avail = $cols - 1 - (2 + $name.Length + 1 + 16 + 1 + $r.Hash.Length + 1)
+        $subj  = $r.Subject
+        if ($subj.Length -gt $avail) { $subj = if ($avail -gt 1) { $subj.Substring(0, $avail - 1) + '…' } else { '' } }
+        "$($r.Head) $e[32m$name$e[m $e[33m$($r.Date)$e[m $e[34m$($r.Hash)$e[m $subj"
+    }
 }
 
 # Checkout
