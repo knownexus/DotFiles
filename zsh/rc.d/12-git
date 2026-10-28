@@ -226,7 +226,9 @@ gdf1() { git diff HEAD~1 --color=always "$@" | less -R; }
 unalias gitb 2>/dev/null
 gitb() {
     if (( $# )); then git branch "$@"; return; fi
-    git branch --sort=-committerdate --format='%(HEAD) %(color:green)%(align:30)%(refname:short)%(end)%(color:reset) %(color:yellow)%(committerdate:format:%Y-%m-%d %H:%M)%(color:reset) %(color:blue)%(objectname:short)%(color:reset) %(contents:subject)'
+    # Tab before the subject so awk can trim it at the first ':' without touching the time
+    git branch --color=always --sort=-committerdate --format='%(HEAD) %(color:green)%(align:30)%(refname:short)%(end)%(color:reset) %(color:yellow)%(committerdate:format:%Y-%m-%d %H:%M)%(color:reset) %(color:blue)%(objectname:short)%(color:reset)%09%(contents:subject)' |
+        awk -F'\t' '{ s = $2; sub(/:.*/, "", s); print $1 " " s }'
 }
 alias gitc='git checkout'
 alias gitcb='git checkout -b'

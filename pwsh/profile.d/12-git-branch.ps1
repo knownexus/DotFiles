@@ -3,7 +3,12 @@
 # Branch — bare gitb lists each branch (newest first) with its last commit date and head; args pass through
 function global:gitb {
     if ($args.Count -gt 0) { git branch @args; return }
-    git branch --sort=-committerdate --format='%(HEAD) %(color:green)%(align:30)%(refname:short)%(end)%(color:reset) %(color:yellow)%(committerdate:format:%Y-%m-%d %H:%M)%(color:reset) %(color:blue)%(objectname:short)%(color:reset) %(contents:subject)'
+    # Tab before the subject so it can be trimmed at the first ':' without touching the time
+    git branch --color=always --sort=-committerdate --format='%(HEAD) %(color:green)%(align:30)%(refname:short)%(end)%(color:reset) %(color:yellow)%(committerdate:format:%Y-%m-%d %H:%M)%(color:reset) %(color:blue)%(objectname:short)%(color:reset)%09%(contents:subject)' |
+        ForEach-Object {
+            $line, $subject = $_ -split "`t", 2
+            "$line $(($subject -split ':', 2)[0])"
+        }
 }
 
 # Checkout
