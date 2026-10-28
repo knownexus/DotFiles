@@ -74,8 +74,46 @@ function global:cd {
         $global:OLDPWD = $tmp
         return
     }
-    $global:OLDPWD = $PWD
-    if ($args.Count -gt 0) { Push-Location $args[0] } else { Push-Location $HOME }
+    $target = if ($args.Count -gt 0) { $args[0] } else { $HOME }
+    # A stray backtick/quote/space on the end (a slipped key or a clipped
+    # paste) — drop it when the path only exists without it
+    if ($target -is [string] -and -not (Test-Path -LiteralPath $target)) {
+        $trimmed = $target.TrimEnd('`', '"', "'", ' ')
+        if ($trimmed -and $trimmed -ne $target -and (Test-Path -LiteralPath $trimmed)) { $target = $trimmed }
+    }
+    $prev = $PWD
+    try {
+        Push-Location $target -ErrorAction Stop
+    } catch [System.Management.Automation.ItemNotFoundException] {
+        Write-CdNotFound ([string]$target)
+        return
+    }
+    $global:OLDPWD = $prev
+}
+
+# A short "no such folder" for cd, naming the deepest part of the path that
+# does exist and any folders there that look like what was meant — instead of
+# Push-Location's error pointing into the profile bundle.
+function script:Write-CdNotFound([string]$Target) {
+    Write-Host "cd: no such folder: $Target" -ForegroundColor Red
+    if ($PWD.Provider.Name -ne 'FileSystem' -and -not [IO.Path]::IsPathRooted($Target)) { return }
+    $p = $Target -replace '^~(?=$|[\\/])', $HOME
+    if (-not [IO.Path]::IsPathRooted($p)) { $p = Join-Path $PWD.ProviderPath $p }
+    try { $p = [IO.Path]::GetFullPath($p) } catch { return }
+
+    $missing = ''
+    while ($p -and -not (Test-Path -LiteralPath $p -PathType Container)) {
+        $missing = Split-Path $p -Leaf
+        $p = Split-Path $p -Parent
+    }
+    if (-not $p) { return }
+    Write-Host "    exists up to: $p" -ForegroundColor DarkGray
+    $stem = $missing.Substring(0, [Math]::Min(3, $missing.Length))
+    if (-not $stem) { return }
+    $near = @(Get-ChildItem -LiteralPath $p -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name.StartsWith($stem, [StringComparison]::OrdinalIgnoreCase) } |
+        Select-Object -First 5 -ExpandProperty Name)
+    if ($near) { Write-Host "    did you mean: $($near -join ', ')" -ForegroundColor DarkGray }
 }
 
 # AUTO_CD — a bare directory name (no `cd`) changes into it

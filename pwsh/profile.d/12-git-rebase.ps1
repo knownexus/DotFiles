@@ -243,9 +243,14 @@ function global:grod {
     git rebase FETCH_HEAD @args
 }
 
+# Fetch origin's main/master (whichever it has) and rebase onto it — gromi
+# without the -i.
 function global:grom {
     if (-not (Assert-GitRepo)) { return }
-    git fetch origin master
+    $primary = Get-GitPrimaryBranch -PreferOrigin
+    if (-not $primary) { Write-Error "No main or master branch found on origin — try gitf first."; return }
+    git fetch origin $primary
+    if ($LASTEXITCODE -ne 0) { return }
     git rebase FETCH_HEAD @args
 }
 
