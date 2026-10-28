@@ -221,7 +221,13 @@ gsv() {
 gdfs() { git diff --staged --color=always "$@" | less -R; }
 gdf1() { git diff HEAD~1 --color=always "$@" | less -R; }
 
-alias gitb='git branch'
+# Bare gitb lists each branch (newest first) with its last commit date and head; args pass through
+# (unalias first so a reload in a shell that still has the old alias works)
+unalias gitb 2>/dev/null
+gitb() {
+    if (( $# )); then git branch "$@"; return; fi
+    git branch --sort=-committerdate --format='%(HEAD) %(color:green)%(align:30)%(refname:short)%(end)%(color:reset) %(color:yellow)%(committerdate:format:%Y-%m-%d %H:%M)%(color:reset) %(color:blue)%(objectname:short)%(color:reset) %(contents:subject)'
+}
 alias gitc='git checkout'
 alias gitcb='git checkout -b'
 alias gitcd='git checkout develop'

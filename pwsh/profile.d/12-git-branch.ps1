@@ -1,7 +1,10 @@
 ﻿# Git branch — branch, checkout, stash, cherry-pick, clean
 
-# Branch
-function global:gitb { git branch @args }
+# Branch — bare gitb lists each branch (newest first) with its last commit date and head; args pass through
+function global:gitb {
+    if ($args.Count -gt 0) { git branch @args; return }
+    git branch --sort=-committerdate --format='%(HEAD) %(color:green)%(align:30)%(refname:short)%(end)%(color:reset) %(color:yellow)%(committerdate:format:%Y-%m-%d %H:%M)%(color:reset) %(color:blue)%(objectname:short)%(color:reset) %(contents:subject)'
+}
 
 # Checkout
 function global:gitc  { git checkout @args }

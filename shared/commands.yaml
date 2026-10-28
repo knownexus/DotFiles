@@ -303,7 +303,7 @@ git:
 - section: Branch & checkout
   commands:
   - keys: gitb
-    desc: list or manage branches
+    desc: list branches (with last commit date and head) or manage them
     cmd: git branch
   - keys: gitc <branch>
     desc: switch branch or restore files
