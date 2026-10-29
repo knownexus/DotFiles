@@ -30,6 +30,22 @@ function global:gpf   { Confirm-ForcePush @args }
 function global:gitfp { Confirm-ForcePush @args }
 function global:gitpf { Confirm-ForcePush @args }
 
+# Move the current branch's remote HEAD to <sha> (force), leaving the local
+# branch where it is. Same confirm + lease as gpf.
+# Usage: gpfs <sha>
+function global:gpfs {
+    param([Parameter(Mandatory)][string]$Sha)
+    if (-not (Assert-GitRepo)) { return }
+    $commit = git rev-parse --verify --quiet "${Sha}^{commit}"
+    if (-not $commit) { Write-Host "Not a commit: $Sha" -ForegroundColor Red; return }
+    $branch = git rev-parse --abbrev-ref HEAD
+    $remote = git config "branch.$branch.remote"
+    if (-not $remote) { $remote = 'origin' }
+    $ref = git config "branch.$branch.merge"
+    if (-not $ref) { $ref = "refs/heads/$branch" }
+    Confirm-ForcePush $remote "${commit}:${ref}"
+}
+
 # Push current branch upstream
 function global:gp1 {
     if (-not (Assert-GitRepo)) { return }

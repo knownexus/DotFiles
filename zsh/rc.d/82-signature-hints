@@ -107,6 +107,7 @@ _SIGHINT_SIGS=(
     # Git — push / remote
     pushdr          "<remote-branch>"
     pushdr-f        "<remote-branch>"
+    gpfs            "<sha>"
 
     # Git — rebase
     gri             "[target|HEAD~N]"
@@ -160,7 +161,7 @@ _SIGHINT_ALL_COMMANDS=(
     gst gp gstl stash stashp
     gitcp gclean
     gitf gitpl update updated
-    gpf gitfp gitpf gp1 pushdr pushdr-f
+    gpf gpfs gitfp gitpf gp1 pushdr pushdr-f
     gru grpo giturl gitremote-reset remote!
     gri grim grsi grd grm grmi gro groi grod gromi grof rebaseon rebase gitra gitrc groot
     grev grev-clean grev-scan

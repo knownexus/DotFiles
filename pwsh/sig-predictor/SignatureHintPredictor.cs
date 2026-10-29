@@ -47,7 +47,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         // Git — fetch / pull
         "gitf", "gitpl",
         // Git — push / remote
-        "gitcp", "pushdr", "pushdr-f", "gclean", "gpf", "gitfp", "gitpf", "gp1",
+        "gitcp", "pushdr", "pushdr-f", "gclean", "gpf", "gpfs", "gitfp", "gitpf", "gp1",
         "gru", "grpo", "giturl", "gitremote-reset", "remote!",
         // Git — stash
         "gp", "git-stash-pop", "gst", "gstl", "stash", "stashp",
@@ -142,6 +142,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "gitcp"                     => new[] { "<commit>" },
         "pushdr"                    => new[] { "<remote-branch>" },
         "pushdr-f"                  => new[] { "<remote-branch>" },
+        "gpfs"                      => new[] { "<sha>" },
         "gclean"                    => new[] { "[path]" },
         "grof"                      => new[] { "<branch>" },
 

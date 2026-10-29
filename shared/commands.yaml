@@ -355,6 +355,9 @@ git:
   - keys: gpf  gitfp  gitpf
     desc: force-push with lease (confirms first; refuses if the remote moved)
     cmd: git push --force-with-lease --force-if-includes
+  - keys: gpfs <sha>
+    desc: force the remote branch's HEAD to a sha (confirms first; local branch unchanged)
+    cmd: git push --force-with-lease origin sha:branch
   - keys: gp1
     desc: push and set upstream tracking
     cmd: git push --set-upstream

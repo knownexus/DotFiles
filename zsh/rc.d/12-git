@@ -430,6 +430,18 @@ gpf()   { _confirm_force_push "$@"; }
 gitfp() { _confirm_force_push "$@"; }
 gitpf() { _confirm_force_push "$@"; }
 
+# Move the current branch's remote HEAD to <sha> (force), leaving the local
+# branch where it is. Same confirm + lease as gpf.
+# Usage: gpfs <sha>
+gpfs() {
+    local commit branch remote ref
+    commit=$(git rev-parse --verify --quiet "${1}^{commit}") || { echo "Not a commit: $1"; return 1; }
+    branch=$(git rev-parse --abbrev-ref HEAD)
+    remote=$(git config "branch.${branch}.remote"); remote=${remote:-origin}
+    ref=$(git config "branch.${branch}.merge");     ref=${ref:-refs/heads/$branch}
+    _confirm_force_push "$remote" "${commit}:${ref}"
+}
+
 gp1() {
     local branch
     branch=$(git rev-parse --abbrev-ref HEAD)
