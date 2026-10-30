@@ -62,7 +62,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         // Git — worktree
         "gws",
         "wt-go", "wt-gof", "wt-list", "wt-feature", "wt-fix", "wt-c", "gitcf",
-        "wt-done", "wt-done-f", "wt!", "wt-prune", "wt-setup", "wt-init", "wt-workspace", "wt-default-base", "fix-fetch-refspecs",
+        "wt-done", "wt-done-f", "wt!", "wt-prune", "wt-setup", "wt-init", "wt-convert", "wt-workspace", "wt-default-base", "fix-fetch-refspecs",
     };
 
     private static string[]? GetSig(string cmd) => cmd switch
@@ -166,6 +166,7 @@ public sealed class SignatureHintPredictor : ICommandPredictor
         "wt-fix"                    => new[] { "<ticket-id>", "<desc>", "[-Base <branch>]" },
         "wt-c"                      => new[] { "<branch>" },
         "wt-setup" or "wt-init"     => new[] { "<branches>", "[-Name <n>]", "[-CloneUrl <url>]" },
+        "wt-convert"                => new[] { "[-WhatIf]" },
         "wt-workspace"              => new[] { "-Path", "<path>", "-Repos", "<url,...>", "-Branches", "<branch,...>" },
         "wt-default-base"           => new[] { "[branch]" },
         "fix-fetch-refspecs"        => new[] { "[root]" },

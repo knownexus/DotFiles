@@ -125,6 +125,7 @@ knowing about explicitly.
 | `grev-clean <A> <B>` | Rewrites A to strip what B reverted — see below |
 | `grev-scan [range]` | Same idea, scanned across a whole commit range |
 | `wt-setup -b <branches>` / `wt-init` | Bare-clone + branch-worktree setup, one repo |
+| `wt-convert [-d]` | Convert the current regular repo, in place, to the bare + worktree layout (`-d` previews) |
 | `wt-workspace <path> <urls> <branches>` | Same, across multiple repos |
 | `wt-gof` *(fzf)* | Fuzzy-pick a worktree and `cd` to it |
 | `gitcf` *(fzf)* | Fuzzy-pick a branch and check it out |

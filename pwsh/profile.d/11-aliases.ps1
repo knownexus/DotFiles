@@ -142,6 +142,7 @@ function global:rpj { Set-Location 'C:\repos\Joiners' }
 function global:rpm { Set-Location 'C:\repos\mobileApp' }
 function global:rpn { Set-Location 'C:\repos\NexusMD-Mono' }
 function global:rps { Set-Location 'C:\repos\SwimApi' }
+function global:rpp { Set-Location 'C:\repos\Pathweave' }
 
 # Editor (respects $VISUAL / $EDITOR env vars)
 function global:v {

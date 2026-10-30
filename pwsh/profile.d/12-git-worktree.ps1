@@ -376,6 +376,80 @@ function global:New-GitWorktreeSetup {
 Set-Alias wt-setup New-GitWorktreeSetup
 Set-Alias wt-init  New-GitWorktreeSetup   # alternative name for the same command
 
+# Convert the current regular repo, in place, into the wt-setup layout:
+#   <repo>\.git-main\   (the old .git, now bare)
+#   <repo>\<branch>\    (the old working tree, untracked/ignored files included)
+# Needs a clean tree, a checked-out branch, no linked worktrees and no
+# submodules (their gitdirs hold relative paths that moving .git would break).
+# -WhatIf previews without touching anything.
+function global:wt-convert {
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
+    $root = git rev-parse --show-toplevel 2>$null
+    if (-not $root) { Write-Error "Not inside a git repository."; return }
+    $root = (Resolve-Path -LiteralPath $root).Path
+
+    if (-not (Test-Path (Join-Path $root '.git') -PathType Container)) {
+        Write-Error "$root has no .git directory — already a worktree/bare layout, or a linked worktree."
+        return
+    }
+    if (@(git -C $root worktree list --porcelain | Where-Object { $_ -match '^worktree ' }).Count -gt 1) {
+        Write-Error "Repo has linked worktrees. Remove them (wt-done) or convert from a clean clone."
+        return
+    }
+    if (Test-Path (Join-Path $root '.gitmodules')) {
+        Write-Error "Repo has submodules; moving .git would break their relative gitdir links."
+        return
+    }
+    $branch = git -C $root branch --show-current
+    if (-not $branch) { Write-Error "HEAD is detached — check out a branch first."; return }
+    # Untracked/ignored files are fine — they move along with the tree.
+    $dirty = @(git -C $root status --porcelain --untracked-files=no)
+    if ($dirty.Count) {
+        Write-Error "Tracked files have uncommitted changes. Commit or stash first:`n$($dirty -join "`n")"
+        return
+    }
+
+    $safeName = $branch -replace '[/\\]', '-'
+    $gitMain  = Join-Path $root '.git-main'
+    $tmp      = Join-Path $root '.wt-convert'
+    $wtDir    = Join-Path $root $safeName
+    # $wtDir may already exist as a repo folder (e.g. branch 'docs', folder docs\) — that's fine,
+    # everything gets parked in $tmp first, which frees the name.
+    if ((Test-Path $gitMain) -or (Test-Path $tmp)) {
+        Write-Error "Name clash: '.git-main' or '.wt-convert' already exists in $root."
+        return
+    }
+    if (-not $PSCmdlet.ShouldProcess($root, "Convert to .git-main + '$safeName\' worktree layout")) { return }
+
+    Set-Location -LiteralPath $root
+    Move-Item -LiteralPath (Join-Path $root '.git') -Destination $gitMain
+    git --git-dir=$gitMain config core.bare true
+
+    New-Item -ItemType Directory -Path $tmp | Out-Null
+    Get-ChildItem -LiteralPath $root -Force |
+        Where-Object { $_.Name -notin '.git-main', '.wt-convert' } |
+        ForEach-Object { Move-Item -LiteralPath $_.FullName -Destination $tmp }
+
+    # --no-checkout: the files are already here, just parked in $tmp until the worktree exists.
+    git --git-dir=$gitMain worktree add --no-checkout $wtDir $branch
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "worktree add failed. Your files are parked in $tmp and the repo is at $gitMain; move them back and rename .git-main to .git (and unset core.bare) to undo."
+        return
+    }
+    Get-ChildItem -LiteralPath $tmp -Force |
+        ForEach-Object { Move-Item -LiteralPath $_.FullName -Destination $wtDir }
+    Remove-Item -LiteralPath $tmp
+    Remove-Item -LiteralPath (Join-Path $gitMain 'index') -ErrorAction SilentlyContinue
+
+    # The new worktree's index starts empty; rebuild it from HEAD (working files untouched).
+    git -C $wtDir reset --quiet
+
+    Set-Location -LiteralPath $wtDir
+    Write-Host "Converted. $root now holds .git-main\ and $safeName\ — add more with wt-c / wt-feature." -ForegroundColor Green
+}
+
 # Workspace — clone multiple repos each with their own worktrees
 Remove-Item -Path Alias:wt-workspace        -Force -ErrorAction SilentlyContinue
 Remove-Item -Path Function:New-GitWorkspace -Force -ErrorAction SilentlyContinue

@@ -507,6 +507,9 @@ git:
   - keys: wt-setup  wt-init <branches>
     desc: single-repo bare clone with branch worktrees
     cmd: (custom)
+  - keys: wt-convert [-WhatIf]
+    desc: convert the current regular repo, in place, to the bare + worktree layout
+    cmd: (custom)
   - keys: wt-workspace <path> <repos> <branches>
     desc: multi-repo workspace with per-repo worktrees
     cmd: (custom script)

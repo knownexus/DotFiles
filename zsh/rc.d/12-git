@@ -1163,6 +1163,76 @@ wt-setup() {
 # wt-init — alternative name for wt-setup
 alias wt-init='wt-setup'
 
+# Convert the current regular repo, in place, into the wt-setup layout:
+#   <repo>/.git-main/   (the old .git, now bare)
+#   <repo>/<branch>/    (the old working tree, untracked/ignored files included)
+# Needs a clean tree, a checked-out branch, no linked worktrees and no
+# submodules (their gitdirs hold relative paths that moving .git would break).
+# Usage: wt-convert [-d|--dry-run]
+wt-convert() {
+    local dry_run=0
+    [[ "$1" == -d || "$1" == --dry-run ]] && dry_run=1
+
+    local root branch safe_name gitmain tmp wtdir
+    root=$(git rev-parse --show-toplevel 2>/dev/null)
+    [[ -z "$root" ]] && { echo "Not inside a git repo." >&2; return 1; }
+
+    if [[ ! -d "$root/.git" ]]; then
+        echo "$root has no .git directory — already a worktree/bare layout, or a linked worktree." >&2; return 1
+    fi
+    if (( $(git -C "$root" worktree list --porcelain | grep -c '^worktree ') > 1 )); then
+        echo "Repo has linked worktrees. Remove them (wt-done) or convert from a clean clone." >&2; return 1
+    fi
+    if [[ -e "$root/.gitmodules" ]]; then
+        echo "Repo has submodules; moving .git would break their relative gitdir links." >&2; return 1
+    fi
+    branch=$(git -C "$root" branch --show-current)
+    [[ -z "$branch" ]] && { echo "HEAD is detached — check out a branch first." >&2; return 1; }
+    # Untracked/ignored files are fine — they move along with the tree.
+    local dirty
+    dirty=$(git -C "$root" status --porcelain --untracked-files=no)
+    if [[ -n "$dirty" ]]; then
+        echo "Tracked files have uncommitted changes. Commit or stash first:" >&2
+        echo "$dirty" >&2; return 1
+    fi
+
+    safe_name="${branch//\//-}"
+    gitmain="$root/.git-main"
+    tmp="$root/.wt-convert"
+    wtdir="$root/$safe_name"
+    # $wtdir may already exist as a repo folder (e.g. branch 'docs', folder docs/) — that's fine,
+    # everything gets parked in $tmp first, which frees the name.
+    if [[ -e "$gitmain" || -e "$tmp" ]]; then
+        echo "Name clash: '.git-main' or '.wt-convert' already exists in $root." >&2; return 1
+    fi
+    if (( dry_run )); then
+        echo "Would convert $root to .git-main + '$safe_name/' worktree layout."
+        return 0
+    fi
+
+    cd "$root" || return 1
+    mv "$root/.git" "$gitmain" || return 1
+    git --git-dir="$gitmain" config core.bare true
+
+    mkdir "$tmp"
+    find "$root" -mindepth 1 -maxdepth 1 ! -name .git-main ! -name .wt-convert -exec mv {} "$tmp/" \;
+
+    # --no-checkout: the files are already here, just parked in $tmp until the worktree exists.
+    if ! git --git-dir="$gitmain" worktree add --no-checkout "$wtdir" "$branch"; then
+        echo "worktree add failed. Your files are parked in $tmp and the repo is at $gitmain; move them back and rename .git-main to .git (and unset core.bare) to undo." >&2
+        return 1
+    fi
+    find "$tmp" -mindepth 1 -maxdepth 1 -exec mv {} "$wtdir/" \;
+    rmdir "$tmp"
+    rm -f "$gitmain/index"
+
+    # The new worktree's index starts empty; rebuild it from HEAD (working files untouched).
+    git -C "$wtdir" reset --quiet
+
+    cd "$wtdir"
+    echo "Converted. $root now holds .git-main/ and $safe_name/ — add more with wt-c / wt-feature."
+}
+
 # Workspace — clone multiple repos each with their own worktrees
 # Usage: wt-workspace <path> <repo-url,...> <branch,...>
 wt-workspace() {
